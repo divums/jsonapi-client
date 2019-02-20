@@ -52,7 +52,7 @@ class AbstractJsonApiObject:
     """
     Base for all JSON API specific objects
     """
-    def __init__(self, session: 'Session', data: Union[dict, list]) -> None:
+    def __init__(self, session: 'Session', data: Union[None, str, dict, list]) -> None:
         self._invalid = False
         self._session = session
         self._handle_data(data)
@@ -67,17 +67,17 @@ class AbstractJsonApiObject:
         """
         raise NotImplementedError
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<{self.__class__.__name__}: {str(self)} ({id(self)})>'
 
-    def __str__(self):
+    def __str__(self) -> str:
         raise NotImplementedError
 
     @property
     def url(self) -> str:
         raise NotImplementedError
 
-    def mark_invalid(self):
+    def mark_invalid(self) -> None:
         self._invalid = True
 
 
@@ -85,9 +85,9 @@ class Meta(AbstractJsonApiObject):
     """
     Object type for meta data
 
-    http://jsonapi.org/format/#document-meta
+    https://jsonapi.org/format/1.0/#document-meta
     """
-    def _handle_data(self, data):
+    def _handle_data(self, data) -> None:
         self.meta = data
 
     def __getattr__(self, name):
@@ -96,7 +96,7 @@ class Meta(AbstractJsonApiObject):
     def __getitem__(self, name):
         return self.meta.get(name)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self.meta)
 
 
@@ -104,9 +104,9 @@ class Link(AbstractJsonApiObject):
     """
     Object type for a single link
 
-    http://jsonapi.org/format/#document-links
+    https://jsonapi.org/format/1.0/#document-links
     """
-    def _handle_data(self, data):
+    def _handle_data(self, data) -> None:
         if data:
             if isinstance(data, str):
                 self.href = data
@@ -116,10 +116,10 @@ class Link(AbstractJsonApiObject):
         else:
             self.href = ''
 
-    def __eq__(self, other):
+    def __eq__(self, other) -> bool:
         return self.href == other.href
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self.href)
 
     @property
@@ -129,7 +129,7 @@ class Link(AbstractJsonApiObject):
         else:
             return f'{self.session.server_url}{self.href}'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.url if self.href else ''
 
     def fetch_sync(self) -> 'Optional[Document]':
@@ -153,21 +153,21 @@ class Links(AbstractJsonApiObject):
     """
     Object type for container of links
 
-    http://jsonapi.org/format/#document-links
+    https://jsonapi.org/format/1.0/#document-links
     """
-    def _handle_data(self, data):
+    def _handle_data(self, data) -> None:
         self._links = {key: Link(self.session, value) for key, value in data.items()}
 
     def __getattr__(self, item):
         return self._links.get(item, Link(self.session, data=None))
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._links)
 
-    def __dir__(self):
+    def __dir__(self) -> Iterable[str]:
         return chain(super().__dir__(), self._links.keys())
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self._links)
 
 
@@ -175,17 +175,17 @@ class ResourceIdentifier(AbstractJsonApiObject):
     """
     Object type for resource identifier
 
-    http://jsonapi.org/format/#document-resource-identifier-objects
+    https://jsonapi.org/format/1.0/#document-resource-identifier-objects
     """
-    def _handle_data(self, data):
-        self.id:str = data.get('id')
-        self.type:str = data.get('type')
+    def _handle_data(self, data) -> None:
+        self.id: str = data.get('id')
+        self.type: str = data.get('type')
 
     @property
-    def url(self):
+    def url(self) -> str:
         return f'{self.session.url_prefix}/{self.type}/{self.id}'
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.type}: {self.id}'
 
     def fetch_sync(self, cache_only=True) -> 'ResourceObject':
@@ -202,8 +202,8 @@ class ResourceIdentifier(AbstractJsonApiObject):
         else:
             return self.fetch_sync(cache_only)
 
-    def as_resource_identifier_dict(self) -> dict:
+    def as_resource_identifier_dict(self) -> Optional[Dict[str, str]]:
         return {'id': self.id, 'type': self.type} if self.id else None
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return self.id is not None

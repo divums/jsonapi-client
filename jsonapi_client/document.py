@@ -50,7 +50,7 @@ class Document(AbstractJsonApiObject):
     Top level of JSON API document.
     Contains one or more ResourceObjects.
 
-    http://jsonapi.org/format/#document-top-level
+    https://jsonapi.org/format/1.0/#document-top-level
     """
 
     #: List of ResourceObjects contained in this Document
@@ -59,7 +59,8 @@ class Document(AbstractJsonApiObject):
     def __init__(self, session: 'Session',
                  json_data: dict,
                  url: str,
-                 no_cache: bool=False) -> None:
+                 no_cache: bool=False)\
+            -> None:
         self._no_cache = no_cache  # if true, do not store resources to session cache
         self._url = url
         super().__init__(session, json_data)
@@ -74,11 +75,11 @@ class Document(AbstractJsonApiObject):
         If there is only 1 ResourceObject contained in this Document, return it.
         """
         if len(self.resources) > 1:
-            logger.warning('There are more than 1 item in document %s, please use '
-                           '.resources!', self)
+            logger.warning('There is more than 1 item in document %s, '
+                           'please use .resources!', self)
         return self.resources[0]
 
-    def _handle_data(self, json_data):
+    def _handle_data(self, json_data) -> None:
         data = json_data.get('data')
 
         self.resources = []
@@ -93,7 +94,7 @@ class Document(AbstractJsonApiObject):
         if [data, self.errors] == [None]*2:
             raise ValidationError('Data or errors is needed')
         if data and self.errors:
-            logger.error('Data and errors can not both exist in the same document')
+            logger.error('Data and errors must not co-exist in the same document')
 
         self.meta = Meta(self.session, json_data.get('meta', {}))
 
@@ -107,7 +108,7 @@ class Document(AbstractJsonApiObject):
         if not self._no_cache:
             self.session.add_resources(*self.resources, *self.included)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.resources}' if self.resources else f'{self.errors}'
 
     def _iterator_sync(self) -> 'Iterator[ResourceObject]':
@@ -127,8 +128,8 @@ class Document(AbstractJsonApiObject):
 
     def iterator(self):
         """
-        Iterate through all resources of this Document and follow pagination until
-        there's no more resources.
+        Iterate through all resources of this Document and follow pagination
+        until there are no more resources.
 
         If Session is in async mode, this needs to be used with async for.
         """
@@ -137,7 +138,7 @@ class Document(AbstractJsonApiObject):
         else:
             return self._iterator_sync()
 
-    def mark_invalid(self):
+    def mark_invalid(self) -> None:
         """
         Mark this Document and it's resources invalid.
         """

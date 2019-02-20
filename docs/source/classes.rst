@@ -36,12 +36,6 @@ Other objects
 .. automodule:: jsonapi_client.objects
    :members:
 
-Other
------
-
-.. automodule:: jsonapi_client.common
-   :members:
-
 Exceptions
 ----------
 

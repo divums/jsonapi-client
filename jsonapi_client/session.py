@@ -52,7 +52,6 @@ if TYPE_CHECKING:
     from .modifiers import BaseModifier
 
 logger = logging.getLogger(__name__)
-NOT_FOUND = object()
 
 
 class Schema:
@@ -71,7 +70,7 @@ class Schema:
         """
 
         # We need to support meta, which can contain whatever schemaless metadata
-        if attribute_name == 'meta' or attribute_name.endswith('.meta'):
+        if attribute_name == 'meta' or (attribute_name and attribute_name.endswith('.meta')):
             return {}
 
         model = self.schema_for_model(model_name)
@@ -81,8 +80,8 @@ class Schema:
             return model
         attr_struct = attribute_name.split('.')
         for a in attr_struct:
-            model = model['properties'].get(a, NOT_FOUND)
-            if model is NOT_FOUND:
+            model = model['properties'].get(a)
+            if model is None:
                 return {}
         return model
 
@@ -164,7 +163,8 @@ class Session:
 
     @staticmethod
     def _value_to_dict(value: 'Union[ResourceObject, ResourceIdentifier, ResourceTuple]',
-                       res_types: 'List[str]') -> dict:
+                       res_types: 'List[str]') \
+            -> Dict[str, str]:
         from .resourceobject import RESOURCE_TYPES
 
         res_type = res_types[0] if len(res_types) == 1 else None
@@ -180,16 +180,16 @@ class Session:
         else:
             if not res_type:
                 raise ValueError('Use ResourceTuple to identify types '
-                                'if there are more than 1 type')
+                                 'if there are more than 1 type')
             return {'id': value, 'type': res_types[0]}
 
     def create(self, _type: str, fields: dict=None, **more_fields) -> 'ResourceObject':
         """
-        Create a new ResourceObject of model _type. This requires that schema is defined
-        for model.
+        Create a new ResourceObject of resource_type. This requires schema to
+        be defined.
 
-        If you have field names that have underscores, you can pass those fields
-        in fields dictionary.
+        If you have field names that have underscores, you can pass those
+        fields in fields dictionary.
 
         """
         from .resourceobject import ResourceObject, RESOURCE_TYPES
@@ -331,27 +331,28 @@ class Session:
         return resource_id, filter
 
     def _get_sync(self, resource_type: str,
-                  resource_id_or_filter: 'Union[BaseModifier, str]'=None) -> 'Document':
-        resource_id, filter_ = self._resource_type_and_filter(
-                                                                resource_id_or_filter)
+                  resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
+            -> 'Document':
+        resource_id, filter_ = self._resource_type_and_filter(resource_id_or_filter)
         url = self._url_for_resource(resource_type, resource_id, filter_)
         return self.fetch_document_by_url(url)
 
     async def _get_async(self, resource_type: str,
-                         resource_id_or_filter: 'Union[BaseModifier, str]'=None) -> 'Document':
-        resource_id, filter_ = self._resource_type_and_filter(
-                                                                resource_id_or_filter)
+                         resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
+            -> 'Document':
+        resource_id, filter_ = self._resource_type_and_filter(resource_id_or_filter)
         url = self._url_for_resource(resource_type, resource_id, filter_)
         return await self.fetch_document_by_url_async(url)
 
-    def get(self, resource_type: str,
-                 resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
+    def get(self,
+            resource_type: str,
+            resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
             -> 'Union[Awaitable[Document], Document]':
         """
         Request (GET) Document from server.
 
-        :param resource_id_or_filter: Resource id or BaseModifier instance to filter
-        resulting resources.
+        :param resource_type: Name of resource type.
+        :param resource_id_or_filter: Resource id or BaseModifier instance to filter resulting resources.
 
         If session is used with enable_async=True, this needs
         to be awaited.
@@ -361,12 +362,16 @@ class Session:
         else:
             return self._get_sync(resource_type, resource_id_or_filter)
 
-    def _iterate_sync(self, resource_type: str, filter: 'BaseModifier'=None) \
+    def _iterate_sync(self,
+                      resource_type: str,
+                      filter: 'BaseModifier'=None) \
             -> 'Iterator[ResourceObject]':
         doc = self.get(resource_type, filter)
         yield from doc._iterator_sync()
 
-    async def _iterate_async(self, resource_type: str, filter: 'BaseModifier'=None) \
+    async def _iterate_async(self,
+                             resource_type: str,
+                             filter: 'BaseModifier'=None) \
             -> 'AsyncIterator[ResourceObject]':
         doc = await self._get_async(resource_type, filter)
         async for res in doc._iterator_async():
@@ -406,7 +411,8 @@ class Session:
                 self,
                 resource: 'Union[ResourceIdentifier, ResourceObject, ResourceTuple]',
                 cache_only=False,
-                force=False) -> 'Optional[ResourceObject]':
+                force=False) \
+            -> 'Optional[ResourceObject]':
         """
         Internal use.
 
@@ -427,7 +433,8 @@ class Session:
                 self,
                 resource: 'Union[ResourceIdentifier, ResourceObject, ResourceTuple]',
                 cache_only=False,
-                force=False) -> 'Optional[ResourceObject]':
+                force=False) \
+            -> 'Optional[ResourceObject]':
         """
         Internal use. Async version.
 

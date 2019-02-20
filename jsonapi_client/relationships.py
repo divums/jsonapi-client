@@ -60,18 +60,20 @@ class AbstractRelationship(AbstractJsonApiObject):
     ResourceObjects are automatically fetched if not in async mode.
     If in async mode, .fetch() needs to be awaited first.
 
-    http://jsonapi.org/format/#document-resource-object-relationships
+    https://jsonapi.org/format/1.0/#document-resource-object-relationships
     """
 
     def __init__(self,
                  session: 'Session',
                  data: dict,
                  resource_types: List[str]=None,
-                 relation_type: str='') -> None:
+                 relation_type: str=None) \
+            -> None:
         """
+        :param session:
+        :param data:
         :param resource_types: List of allowed resource types
-        :param relation_type: Relation type, either 'to-one' or 'to-many',
-            or not specified (empty string).
+        :param relation_type: Relation type, either 'to-one' or 'to-many', or not specified (empty string).
         """
         self._resources: Dict[Tuple[str, str], ResourceObject] = None
         self._invalid = False
@@ -120,7 +122,7 @@ class AbstractRelationship(AbstractJsonApiObject):
         """
         self._is_dirty = True
 
-    async def _fetch_async(self) -> 'List[ResourceObject]':
+    async def _fetch_async(self) -> 'Awaitable[List[ResourceObject]]':
         raise NotImplementedError
 
     def _fetch_sync(self) -> 'List[ResourceObject]':
@@ -211,24 +213,24 @@ class AbstractRelationship(AbstractJsonApiObject):
     def __bool__(self):
         raise NotImplementedError
 
-    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', type_: str='') \
+    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', type_: str=None) \
             -> 'Union[ResourceIdentifier, ResourceObject]':
         from .resourceobject import RESOURCE_TYPES
         if isinstance(value, RESOURCE_TYPES):
-            r_ident = ResourceIdentifier(self.session, {'id': value.id, 'type': value.type})
+            data = {'id': value.id, 'type': value.type}
         else:
-            r_ident = ResourceIdentifier(self.session, {'id': value,
-                                                     'type': type_ or self.type})
-        res = self._resources and self._resources.get((r_ident.type, r_ident.id))
-        return res or r_ident
+            data = {'id': value, 'type': type_ or self.type}
+        res_id = ResourceIdentifier(self.session, data)
+        res_obj = self._resources and self._resources.get((res_id.type, res_id.id))
+        return res_obj or res_id
 
 
 class ToOneRelationship(AbstractRelationship):
     """
-    Relationship class for to-one type relationships, that are received from
-    server as ResourceIdentifiers.
+    Relationship class for to-one type relationships
+    that are received from server as a single ResourceIdentifier.
     """
-    def _handle_data(self, data):
+    def _handle_data(self, data) -> None:
         super()._handle_data(data)
         if self._resource_data is None:
             self._resource_identifier = None
@@ -236,7 +238,7 @@ class ToOneRelationship(AbstractRelationship):
             self._resource_identifier = ResourceIdentifier(self.session, self._resource_data)
         del self._resource_data  # This is not intended to be used after this
 
-    async def _fetch_async(self) -> 'List[ResourceObject]':
+    async def _fetch_async(self) -> 'List[Union[None, ResourceObject]]':
         self.session.assert_async()
         res_id = self._resource_identifier
         if res_id is None:
@@ -256,10 +258,10 @@ class ToOneRelationship(AbstractRelationship):
             self._resources = {(res.type, res.id): res}
         return list(self._resources.values())
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._resource_identifier)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self._resource_identifier)
 
     @property
@@ -273,7 +275,7 @@ class ToOneRelationship(AbstractRelationship):
         return self._resource_identifier.url
 
     @property
-    def as_json_resource_identifiers(self) -> dict:
+    def as_json_resource_identifiers(self) -> Optional[dict]:
         if self._resource_identifier is None:
             return None
         return self._resource_identifier.as_resource_identifier_dict()
@@ -284,7 +286,7 @@ class ToOneRelationship(AbstractRelationship):
             return None
         return super()._value_to_identifier(value, type_)
 
-    def set(self, new_value: 'ResourceIdentifierTypes', type_: str='') -> None:
+    def set(self, new_value: 'ResourceIdentifierTypes', type_: str=None) -> None:
 
         self._resource_identifier = self._value_to_identifier(new_value, type_)
         self.mark_dirty()
@@ -292,8 +294,8 @@ class ToOneRelationship(AbstractRelationship):
 
 class ToManyRelationship(AbstractRelationship):
     """
-    Relationship class for to-many type relationships, that are received from
-    server as ResourceIdentifiers.
+    Relationship class for to-many type relationships
+    that are received from server as array of ResourceIdentifiers.
     """
     def _handle_data(self, data):
         super()._handle_data(data)
@@ -321,7 +323,7 @@ class ToManyRelationship(AbstractRelationship):
             self._resources[(res.type, res.id)] = res
         return list(self._resources.values())
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self._resource_identifiers)
 
     @property
@@ -337,7 +339,7 @@ class ToManyRelationship(AbstractRelationship):
                                       for value in new_values]
         self.mark_dirty()
 
-    def clear(self):
+    def clear(self) -> None:
         """
         Remove all target resources (commit will remove them on server side).
         """
@@ -361,14 +363,14 @@ class ToManyRelationship(AbstractRelationship):
     def __add__(self, other):
         return self.add(other)
 
-    def __bool__(self):
+    def __bool__(self) -> bool:
         return bool(self._resource_identifiers)
 
 
 class LinkRelationship(AbstractRelationship):
     """
-    Relationship class for to-one or to-many type relationships, that are received from
-    server with only link information (no ResourceIdentifiers).
+    Relationship class for to-one or to-many type relationships
+    that are received from server with only link information but no ResourceIdentifier.
     """
     def __init__(self, *args, **kwargs):
         self._resource_identifiers = None
@@ -387,10 +389,7 @@ class LinkRelationship(AbstractRelationship):
 
     @property
     def is_single(self) -> bool:
-        if self._relation_type:
-            return self._relation_type == RelationType.TO_ONE
-        else:
-            return False
+        return self._relation_type and self._relation_type == RelationType.TO_ONE
 
     async def _fetch_async(self) -> 'List[ResourceObject]':
         self.session.assert_async()
@@ -409,12 +408,12 @@ class LinkRelationship(AbstractRelationship):
         self._resources = {(r.type, r.id): r for r in self._document.resources}
         return list(self._resources.values())
 
-    def mark_clean(self):
+    def mark_clean(self) -> None:
         self._is_dirty = False
         if self._document:
             self._document.mark_invalid()
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (f'{self.url} ({len(self.resources)}) dirty: {self.is_dirty}'
                 if self.is_fetched else self.url)
 
@@ -448,7 +447,7 @@ class LinkRelationship(AbstractRelationship):
 
 class MetaRelationship(AbstractRelationship):
     """
-    Handle relationship manually through meta object. We don't know what to do
-    about them as they are custom data.
+    Handle relationship manually through meta object.
+    We don't know what to do about them as they are custom data.
     """
-
+    pass

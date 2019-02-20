@@ -33,7 +33,7 @@
 
 import logging
 from itertools import chain
-from typing import Set, Optional, Awaitable, Union, Iterable, TYPE_CHECKING
+from typing import Set, Optional, Awaitable, Union, Iterable, TYPE_CHECKING, Any, Dict
 
 from .objects import AbstractJsonApiObject, ResourceIdentifier, ResourceTuple
 from .relationships import RelationType
@@ -41,12 +41,10 @@ from .exceptions import ValidationError, DocumentInvalid
 from .http import HttpMethod, HttpStatus
 from .utils import pythonify_names, jsonify_name, cached_property
 
-NOT_FOUND = object()
-
-logger = logging.getLogger(__name__)
-
 if TYPE_CHECKING:
     from .session import Schema, Session
+
+logger = logging.getLogger(__name__)
 
 
 class FieldProxy:
@@ -80,25 +78,27 @@ class FieldProxy:
 class AttributeDict(dict):
     """
     Container for JSON API attributes in ResourceObjects.
-    In addition to standard dictionary this offers:
-    - access to attributes via getattr (attribute names jsonified, i.e.
-        my_attr -> my-attr)
-    - dirty-flagging attributes upon change (keep track of changed attributes)
-      and ability to generate diff structure containing only changed data
-      (for PATCHing)
-    - etc.
+
+    In addition to features of standard dictionary, this offers:
+    - access to attributes via getattr
+      (NOTE: attribute names are jsonified, i.e. my_attr -> my-attr)
+    - dirty-flagging attributes upon change (it keeps track of changes)
+    - enables generating diff containing only changed data (useful for PATCH)
     """
-    def __init__(self, data: dict,
+
+    def __init__(self,
+                 data: dict,
                  resource: 'ResourceObject',
                  name: str ='',
-                 parent: 'AttributeDict'=None) -> None:
+                 parent: 'AttributeDict'=None) \
+            -> None:
         """
-        :param data: Input data (dictionary) that is stored here.
-        :param resource: root ResourceObject
-        :param name: name of this attribute, if this is contained within another
-            AttributeDict. Otherwise None.
+        :param data: Input data that is stored here.
+        :param resource: Root ResourceObject
+        :param name: Name of this attribute, if this is contained within another
+            AttributeDict. Otherwise, None.
         :param parent: Parent AttributeDict if this is contained within another
-            AttributeDict. Otherwise None
+            AttributeDict. Otherwise, None.
         """
         super().__init__()
         self._parent = parent
@@ -118,8 +118,8 @@ class AttributeDict(dict):
         if specification:
             for field_name, field_spec in specification['properties'].items():
                 if field_spec.get('type') == 'object':
-                    _data = data.pop(field_name, {})
-                    self[field_name] = AttributeDict(data=_data,
+                    field_data = data.pop(field_name, {})
+                    self[field_name] = AttributeDict(data=field_data,
                                                      name=field_name,
                                                      parent=self,
                                                      resource=resource)
@@ -138,7 +138,7 @@ class AttributeDict(dict):
                 self[key] = AttributeDict(data=value, name=key, parent=self, resource=resource)
         self._dirty_attributes.clear()
 
-    def create_map(self, attr_name):
+    def create_map(self, attr_name: str) -> None:
         """
         Create a new map of values (i.e. child AttributeDict) within this AttributeDict
 
@@ -148,29 +148,29 @@ class AttributeDict(dict):
         name = jsonify_name(attr_name)
         self[name] = AttributeDict(data={}, name=name, parent=self, resource=self._resource)
 
-    def _check_invalid(self):
+    def _check_invalid(self) -> None:
         if self._invalid:
             raise DocumentInvalid('Resource has been invalidated.')
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> Any:
         name = jsonify_name(name)
         if name not in self:
             raise AttributeError(f'No such attribute '
                                  f'{self._resource.type}.{self._full_name}.{name}')
         return self[name]
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any) -> None:
         if self.get(key) != value:
             self.mark_dirty(key)
         super().__setitem__(key, value)
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name: str, value: Any) -> None:
         if name.startswith('_'):
             return super().__setattr__(name, value)
         name = jsonify_name(name)
         self[name] = value
 
-    def mark_dirty(self, name: str):
+    def mark_dirty(self, name: str) -> None:
         """
         Mark one attribute within this dictionary as dirty.
 
@@ -180,7 +180,7 @@ class AttributeDict(dict):
         if self._parent:
             self._parent.mark_dirty(self._name)
 
-    def mark_clean(self):
+    def mark_clean(self) -> None:
         """
         Mark all attributes recursively as clean..
         """
@@ -226,7 +226,7 @@ class AttributeDict(dict):
     def is_dirty(self) -> bool:
         return bool(self._dirty_attributes)
 
-    def mark_invalid(self):
+    def mark_invalid(self) -> None:
         """
         Recursively mark this and contained objects as invalid.
         """
@@ -257,7 +257,7 @@ class RelationshipDict(dict):
     Container for relationships that is stored in ResourceObject
     """
 
-    def __init__(self, data: dict, resource: 'ResourceObject'):
+    def __init__(self, data: dict, resource: 'ResourceObject') -> None:
         """
         :param data: Raw input data where Relationship objects are built from.
         :param resource: Parent ResourceObject
@@ -282,7 +282,7 @@ class RelationshipDict(dict):
                              for key, value in data.items()}
             self.update(relationships)
 
-    def mark_invalid(self):
+    def mark_invalid(self) -> None:
         """
         Mark invalid this dictionary and contained Relationships.
         """
@@ -309,11 +309,11 @@ class RelationshipDict(dict):
         if 'data' in data:
             relationship_data = data['data']
             if isinstance(relationship_data, list):
-                if not (not relation_type or relation_type == RelationType.TO_MANY):
+                if relation_type and relation_type != RelationType.TO_MANY:
                     logger.error('Conflicting information about relationship')
                 return rel.ToManyRelationship
             elif relationship_data is None or isinstance(relationship_data, dict):
-                if not(not relation_type or relation_type == RelationType.TO_ONE):
+                if relation_type and relation_type != RelationType.TO_ONE:
                     logger.error('Conflicting information about relationship')
                 return rel.ToOneRelationship
             else:
@@ -334,7 +334,7 @@ class RelationshipDict(dict):
         return cls(self.session, data, resource_types=resource_types,
                    relation_type=relation_type)
 
-    def mark_clean(self):
+    def mark_clean(self) -> None:
         """
         Mark all relationships as clean (not dirty).
         """
@@ -358,7 +358,7 @@ class ResourceObject(AbstractJsonApiObject):
     via instance attributes (__getattr__). In case of namespace collisions, there is also
     .fields attribute proxy.
 
-    http://jsonapi.org/format/#document-resource-objects
+    https://jsonapi.org/format/1.0/#document-resource-objects
     """
 
     #: Attributes (that are not starting with _) that we want to ignore in __setattr__
@@ -370,12 +370,13 @@ class ResourceObject(AbstractJsonApiObject):
         super().__init__(session, data)
 
     @cached_property
-    def fields(self):
+    def fields(self) -> 'FieldProxy':
         """
         Proxy to all fields (both attributes and relationship target resources)
         """
         class Proxy(FieldProxy):
             def __getitem__(proxy, item):
+                NOT_FOUND = object()
                 rv = self._attributes.get(item, NOT_FOUND)
                 if rv is NOT_FOUND:
                     return self.relationship_resource[item]
@@ -389,20 +390,21 @@ class ResourceObject(AbstractJsonApiObject):
                     self._attributes[item] = value
 
             def __dir__(proxy):
-                return chain(super().__dir__(), self._attributes.keys_python(),
+                return chain(super().__dir__(),
+                             self._attributes.keys_python(),
                              self._relationships.keys_python())
 
         return Proxy()
 
     @cached_property
-    def attributes(self):
+    def attributes(self) -> 'FieldProxy':
         """
         Proxy to all attributes (not relationships)
         """
         return FieldProxy(self._attributes)
 
     @cached_property
-    def relationships(self):
+    def relationships(self) -> 'FieldProxy':
         """
         Proxy to relationship objects
         """
@@ -414,7 +416,7 @@ class ResourceObject(AbstractJsonApiObject):
         return Proxy(self._relationships)
 
     @cached_property
-    def relationship_resource(self):
+    def relationship_resource(self) -> 'FieldProxy':
         """
         If async enabled, proxy to relationship objects.
         If async disabled, proxy to resources behind relationships.
@@ -433,23 +435,25 @@ class ResourceObject(AbstractJsonApiObject):
 
         return Proxy()
 
-    def _handle_data(self, data):
+    def _handle_data(self, data: dict) -> None:
         from .objects import Links, Meta
         self.id = data['id']
         self.type = data['type']
         self.links = Links(self.session, data.get('links', {}))
         self.meta = Meta(self.session, data.get('meta', {}))
 
-        self._attributes = AttributeDict(data=data['attributes'],
-                                         resource=self)
-        self._relationships = RelationshipDict(
-            data=data.get('relationships', {}),
-            resource=self)
+        self._attributes = (
+            # TODO: handle if no attributes
+            AttributeDict(data=data.get('attributes', {}), resource=self)
+        )
+        self._relationships = (
+            RelationshipDict(data=data.get('relationships', {}), resource=self)
+        )
 
         if self.id:
             self.validate()
 
-    def create_map(self, name):
+    def create_map(self, name: str) -> None:
         """
         Create a map of values (AttributeDict) with name in attribute container.
         """
@@ -459,7 +463,7 @@ class ResourceObject(AbstractJsonApiObject):
         return chain(super().__dir__(), self._attributes.keys_python(),
                      self._relationships.keys_python())
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f'{self.type}: {self.id} ({id(self)})'
 
     @property
@@ -476,23 +480,23 @@ class ResourceObject(AbstractJsonApiObject):
                 or self._attributes.is_dirty
                 or self._relationships.is_dirty)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: str) -> Any:
         return self.fields[item]
 
-    def __setitem__(self, item, value):
+    def __setitem__(self, item: str, value: Any) -> None:
         self.fields[item] = value
 
-    def __getattr__(self, attr_name):
+    def __getattr__(self, attr_name: str) -> Any:
         return getattr(self.fields, attr_name)
 
-    def __setattr__(self, attr_name, value):
+    def __setattr__(self, attr_name: str, value: Any) -> None:
         if attr_name.startswith('_') or attr_name in self.__attributes:
             return super().__setattr__(attr_name, value)
 
         return setattr(self.fields, attr_name, value)
 
     @property
-    def dirty_fields(self):
+    def dirty_fields(self) -> Set[str]:
         return (self._attributes._dirty_attributes |
                 {name for name, rel in self._relationships.items() if rel.is_dirty})
 
@@ -505,7 +509,7 @@ class ResourceObject(AbstractJsonApiObject):
     def post_url(self) -> str:
         return f'{self.session.url_prefix}/{self.type}'
 
-    def validate(self):
+    def validate(self) -> None:
         """
         Validate our attributes against schema.
         """
@@ -544,11 +548,11 @@ class ResourceObject(AbstractJsonApiObject):
         return {'data': res_json}
 
     @property
-    def _http_method(self):
+    def _http_method(self) -> str:
         return HttpMethod.PATCH if self.id else HttpMethod.POST
 
-    def _pre_commit(self, custom_url):
-        url = custom_url or self.post_url if self._http_method == HttpMethod.POST else self.url
+    def _pre_commit(self, url):
+        url = url or self.post_url if self._http_method == HttpMethod.POST else self.url
         logger.info('Committing %s to %s', self, url)
         self.validate()
         return url
@@ -557,7 +561,7 @@ class ResourceObject(AbstractJsonApiObject):
         if HttpStatus.has_resource(status):
             self._update_resource(result, location)
 
-        # If no resources are returned (which is the case when 202 (Accepted)
+        # If no resources are returned (which is the case when HTTP 202 Accepted
         # is received for PATCH, for example).
         self.mark_clean()
 
@@ -619,19 +623,19 @@ class ResourceObject(AbstractJsonApiObject):
         self.links = new_res.links
         self.session.add_resources(self)
 
-    def _refresh_sync(self):
+    def _refresh_sync(self) -> None:
         self.session.assert_sync()
         new_res = self.session.fetch_resource_by_resource_identifier(self, force=True)
         self._update_resource(new_res)
 
-    async def _refresh_async(self):
+    async def _refresh_async(self) -> None:
         self.session.assert_async()
         new_res = await self.session.fetch_resource_by_resource_identifier_async(
                                                                             self,
                                                                             force=True)
         self._update_resource(new_res)
 
-    def refresh(self):
+    def refresh(self) -> Optional[Awaitable]:
         """
         Manual way to refresh the data contained in this ResourceObject from server.
 
@@ -642,13 +646,13 @@ class ResourceObject(AbstractJsonApiObject):
         else:
             return self._refresh_sync()
 
-    def delete(self):
+    def delete(self) -> None:
         """
         Mark resource to be deleted. Resource will be deleted upon commit.
         """
         self._delete = True
 
-    def _perform_delete(self, url=''):
+    def _perform_delete(self, url='') -> None:
         url = url or self.url
         self.session.http_request(HttpMethod.DELETE, url, {})
         self.session.remove_resource(self)
@@ -658,14 +662,14 @@ class ResourceObject(AbstractJsonApiObject):
         await self.session.http_request_async(HttpMethod.DELETE, url, {})
         self.session.remove_resource(self)
 
-    def mark_clean(self):
+    def mark_clean(self) -> None:
         """
         Mark this resource and attributes / relationships as clean (not dirty).
         """
         self._attributes.mark_clean()
         self._relationships.mark_clean()
 
-    def mark_invalid(self):
+    def mark_invalid(self) -> None:
         """
         Mark this resource and it's related objects as invalid.
         """
@@ -675,9 +679,8 @@ class ResourceObject(AbstractJsonApiObject):
         self.meta.mark_invalid()
         self.links.mark_invalid()
 
-    def as_resource_identifier_dict(self) -> dict:
+    def as_resource_identifier_dict(self) -> Dict[str, str]:
         return {'id': self.id, 'type': self.type}
 
 
 RESOURCE_TYPES = (ResourceObject, ResourceIdentifier, ResourceTuple)
-
