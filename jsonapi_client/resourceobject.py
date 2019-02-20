@@ -311,11 +311,11 @@ class RelationshipDict(dict):
             if isinstance(relationship_data, list):
                 if not (not relation_type or relation_type == RelationType.TO_MANY):
                     logger.error('Conflicting information about relationship')
-                return rel.MultiRelationship
+                return rel.ToManyRelationship
             elif relationship_data is None or isinstance(relationship_data, dict):
                 if not(not relation_type or relation_type == RelationType.TO_ONE):
                     logger.error('Conflicting information about relationship')
-                return rel.SingleRelationship
+                return rel.ToOneRelationship
             else:
                 raise ValidationError('Relationship data key is invalid')
         elif 'links' in data:
@@ -323,9 +323,9 @@ class RelationshipDict(dict):
         elif 'meta' in data:
             return rel.MetaRelationship
         elif relation_type == RelationType.TO_MANY:
-            return rel.MultiRelationship
+            return rel.ToManyRelationship
         elif relation_type == RelationType.TO_ONE:
-            return rel.SingleRelationship
+            return rel.ToOneRelationship
         else:
             raise ValidationError('Must have either links, data or meta in relationship')
 
@@ -522,10 +522,9 @@ class ResourceObject(AbstractJsonApiObject):
         if self.id:
             res_json['id'] = self.id
 
-        if self._http_method == 'post' or full:
-            # When creating new resources, we need to specify explicitly all
-            # relationships, as SingleRelationships, or MultiRelationships.
-
+        if self._http_method == HttpMethod.POST or full:
+            # When creating new resources, we need to define all relationships
+            # as either to-one or to-many.
             relationships = {key: {'data': value.as_json_resource_identifiers}
                              for key, value in self._relationships.items() if bool(value)}
             res_json.update({

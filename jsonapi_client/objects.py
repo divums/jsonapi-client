@@ -159,10 +159,7 @@ class Links(AbstractJsonApiObject):
         self._links = {key: Link(self.session, value) for key, value in data.items()}
 
     def __getattr__(self, item):
-        attr = self._links.get(item)
-        if not attr:
-            return Link(self.session, '')
-        return attr
+        return self._links.get(item, Link(self.session, data=None))
 
     def __bool__(self):
         return bool(self._links)

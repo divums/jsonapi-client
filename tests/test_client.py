@@ -308,7 +308,7 @@ async def test_relationships_iterator_async(mocked_fetch, article_schema):
     doc = await s.get('articles')
     article, article2, article3 = doc.resources
     comments = article.comments
-    assert isinstance(comments, jsonapi_client.relationships.MultiRelationship)
+    assert isinstance(comments, jsonapi_client.relationships.ToManyRelationship)
     assert len(comments._resource_identifiers) == 2
 
 
@@ -319,7 +319,7 @@ async def test_relationships_single_async(mocked_fetch, article_schema):
     article, article2, article3 = doc.resources
 
     author = article.author
-    assert isinstance(author, jsonapi_client.relationships.SingleRelationship)
+    assert isinstance(author, jsonapi_client.relationships.ToOneRelationship)
     with pytest.raises(AsyncError):
         _ = author.resource
 
@@ -390,7 +390,7 @@ async def test_relationships_multi_async(mocked_fetch, article_schema):
     doc = await s.get('articles')
     article = doc.resource
     comments = article.comments
-    assert isinstance(comments, jsonapi_client.relationships.MultiRelationship)
+    assert isinstance(comments, jsonapi_client.relationships.ToManyRelationship)
     assert len(comments._resource_identifiers) == 2
 
     c1, c2 = await comments.fetch()
@@ -399,7 +399,7 @@ async def test_relationships_multi_async(mocked_fetch, article_schema):
     assert 'body' in dir(c1)
     assert c1.body == "First!"
 
-    assert isinstance(c1.author, jsonapi_client.relationships.SingleRelationship)
+    assert isinstance(c1.author, jsonapi_client.relationships.ToOneRelationship)
 
     assert c2.body == 'I like XML better'
     with pytest.raises(AsyncError):
@@ -411,7 +411,7 @@ async def test_relationships_multi_async(mocked_fetch, article_schema):
     assert author_res.last_name == 'Gebhardt'
 
     rel = article.comments_or_authors
-    assert isinstance(rel, jsonapi_client.relationships.MultiRelationship)
+    assert isinstance(rel, jsonapi_client.relationships.ToManyRelationship)
     await rel.fetch()
     res1, res2 = rel.resources
 
@@ -454,7 +454,7 @@ async def test_fetch_external_resources_async(mocked_fetch, article_schema):
     doc = await s.get('articles')
     article = doc.resource
     comments = article.comments
-    assert isinstance(comments, jsonapi_client.relationships.MultiRelationship)
+    assert isinstance(comments, jsonapi_client.relationships.ToManyRelationship)
     session = article.session
     c1, c2 = await comments.fetch()
     assert c1.body == "First!"

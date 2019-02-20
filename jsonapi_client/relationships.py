@@ -223,7 +223,7 @@ class AbstractRelationship(AbstractJsonApiObject):
         return res or r_ident
 
 
-class SingleRelationship(AbstractRelationship):
+class ToOneRelationship(AbstractRelationship):
     """
     Relationship class for to-one type relationships, that are received from
     server as ResourceIdentifiers.
@@ -290,7 +290,7 @@ class SingleRelationship(AbstractRelationship):
         self.mark_dirty()
 
 
-class MultiRelationship(AbstractRelationship):
+class ToManyRelationship(AbstractRelationship):
     """
     Relationship class for to-many type relationships, that are received from
     server as ResourceIdentifiers.
