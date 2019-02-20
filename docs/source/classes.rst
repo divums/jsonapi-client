@@ -11,7 +11,6 @@ Session
 .. automodule:: jsonapi_client.filter
    :members:
 
-
 Document
 --------
 

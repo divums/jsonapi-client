@@ -53,9 +53,13 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = 'JSONAPI Client'
-copyright = '2017, Qvantel Inc'
-author = 'Tuomas Airaksinen'
+project = 'JSON API Client'
+copyright = '2017-2019, Qvantel'
+author = 'Zoltan Papp'
+
+project_nospaces = project.replace(' ', '')
+documentation_title = '{project} Documentation'.format(project=project)
+
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -107,9 +111,10 @@ html_static_path = ['_static']
 # -- Options for HTMLHelp output ------------------------------------------
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'JSONAPIClientdoc'
+htmlhelp_basename = '{}doc'.format(project.replace(' ', ''))
 
 autodoc_member_order = 'bysource'
+
 
 # -- Options for LaTeX output ---------------------------------------------
 
@@ -135,8 +140,11 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-    (master_doc, 'JSONAPIClient.tex', 'JSONAPI Client Documentation',
-     'Tuomas Airaksinen', 'manual'),
+    (master_doc,
+     '{}.tex'.format(project_nospaces),
+     documentation_title,
+     author,
+     'manual'),
 ]
 
 
@@ -145,8 +153,11 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    (master_doc, 'jsonapiclient', 'JSONAPI Client Documentation',
-     [author], 1)
+    (master_doc,
+     project_nospaces.lower(),
+     documentation_title,
+     [author],
+     1)
 ]
 
 
@@ -156,10 +167,11 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-    (master_doc, 'JSONAPIClient', 'JSONAPI Client Documentation',
-     author, 'JSONAPIClient', 'One line description of project.',
+    (master_doc,
+     project_nospaces,
+     documentation_title,
+     author,
+     project_nospaces,
+     'JSON API client for Python',
      'Miscellaneous'),
 ]
-
-
-

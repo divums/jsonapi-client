@@ -1,5 +1,5 @@
 FROM python:3.6.1-alpine
-MAINTAINER Tuomas Airaksinen <tuomas.airaksinen@qvantel.com>
+MAINTAINER Zoltan Papp <zoltan.papp@qvantel.com>
 ENV PYTHONUNBUFFERED 1
 RUN apk update && apk upgrade && apk add --no-cache gcc python3-dev musl-dev make
 RUN pip install -U pip setuptools
