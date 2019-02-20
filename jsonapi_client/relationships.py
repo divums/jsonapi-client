@@ -33,7 +33,7 @@
 
 import collections
 import logging
-from typing import List, Union, Iterable, Dict, Tuple, Awaitable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, List, Union, Iterable, Dict, Tuple, Awaitable
 
 from .common import AbstractJsonObject, RelationType, ResourceTuple
 from .objects import (Meta, Links, ResourceIdentifier, RESOURCE_TYPES)
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 R_IDENT_TYPES = Union[str, ResourceObject, ResourceIdentifier, ResourceTuple]
 
 if TYPE_CHECKING:
-    from .filter import Modifier
+    from .modifiers import BaseModifier
     from .document import Document
     from .session import Session
 
@@ -80,17 +80,17 @@ class AbstractRelationship(AbstractJsonObject):
     def is_single(self) -> bool:
         raise NotImplementedError
 
-    def _modify_sync(self, modifier: 'Modifier') -> 'Document':
+    def _modify_sync(self, modifier: 'BaseModifier') -> 'Document':
         url = modifier.url_with_modifiers(self.url)
         return self.session.fetch_document_by_url(url)
 
-    async def _modify_async(self, modifier: 'Modifier'):
+    async def _modify_async(self, modifier: 'BaseModifier'):
         url = modifier.url_with_modifiers(self.url)
         return self.session.fetch_document_by_url_async(url)
 
-    def filter(self, filter: 'Modifier') -> 'Union[Awaitable[Document], Document]':
+    def filter(self, filter: 'BaseModifier') -> 'Union[Awaitable[Document], Document]':
         """
-        Receive filtered list of resources. Use Modifier instance.
+        Receive filtered list of resources. Use BaseModifier instance.
 
         If in async mode, this needs to be awaited.
         """

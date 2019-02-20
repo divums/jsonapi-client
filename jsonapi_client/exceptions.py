@@ -31,7 +31,6 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-
 class JsonApiClientError(Exception):
     """
     Generic exception class for jsonapi-client
@@ -45,7 +44,7 @@ class ValidationError(JsonApiClientError):
 
 class DocumentError(JsonApiClientError):
     """
-    Raised when 404 or other error takes place.
+    Raised when an HTTP request returns with an error response.
     Status code is stored in errors['status_code'].
     """
     def __init__(self, *args, errors, **kwargs):

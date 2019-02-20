@@ -5,15 +5,16 @@ import jsonschema
 import pytest
 import json
 import os
-from jsonschema import ValidationError
+from unittest import mock
+
 from jsonapi_client import ResourceTuple
 import jsonapi_client.objects
 import jsonapi_client.relationships
 import jsonapi_client.resourceobject
 from jsonapi_client.exceptions import DocumentError, AsyncError
-from jsonapi_client.filter import Filter
+from jsonapi_client.modifiers import Filter
 from jsonapi_client.session import Session
-from unittest import mock
+
 
 
 external_references = \
@@ -943,7 +944,7 @@ def test_schema_validation(mocked_fetch):
     schema2['articles']['properties']['title']['type'] = 'number'
     s = Session('http://localhost:8080/', schema=schema2)
 
-    with pytest.raises(ValidationError) as e:
+    with pytest.raises(jsonschema.ValidationError) as e:
         article = s.get('articles')
         #article.title.startswith('JSON API paints')
     assert 'is not of type \'number\'' in str(e)

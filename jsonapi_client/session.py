@@ -35,8 +35,7 @@ import collections
 import json
 import logging
 from itertools import chain
-from typing import (TYPE_CHECKING, Set, Optional, Tuple, Dict, Union, Iterable,
-                    AsyncIterable, Awaitable, AsyncIterator, Iterator, List)
+from typing import TYPE_CHECKING, Set, Optional, Tuple, Dict, Union, Awaitable, AsyncIterator, Iterator, List
 from urllib.parse import ParseResult, urlparse
 
 import jsonschema
@@ -51,7 +50,7 @@ if TYPE_CHECKING:
     from .document import Document
     from .resourceobject import ResourceObject
     from .relationships import ResourceTuple
-    from .filter import Modifier
+    from .modifiers import BaseModifier
 
 logger = logging.getLogger(__name__)
 NOT_FOUND = object()
@@ -312,7 +311,7 @@ class Session:
 
     def _url_for_resource(self, resource_type: str,
                           resource_id: str=None,
-                          filter: 'Modifier'=None) -> str:
+                          filter: 'BaseModifier'=None) -> str:
         url = f'{self.url_prefix}/{resource_type}'
         if resource_id is not None:
             url = f'{url}/{resource_id}'
@@ -322,10 +321,10 @@ class Session:
 
     @staticmethod
     def _resource_type_and_filter(
-                resource_id_or_filter: 'Union[Modifier, str]'=None)\
-            -> 'Tuple[Optional[str], Optional[Modifier]]':
-        from .filter import Modifier
-        if isinstance(resource_id_or_filter, Modifier):
+                resource_id_or_filter: 'Union[BaseModifier, str]'=None)\
+            -> 'Tuple[Optional[str], Optional[BaseModifier]]':
+        from .modifiers import BaseModifier
+        if isinstance(resource_id_or_filter, BaseModifier):
             resource_id = None
             filter = resource_id_or_filter
         else:
@@ -334,26 +333,26 @@ class Session:
         return resource_id, filter
 
     def _get_sync(self, resource_type: str,
-                  resource_id_or_filter: 'Union[Modifier, str]'=None) -> 'Document':
+                  resource_id_or_filter: 'Union[BaseModifier, str]'=None) -> 'Document':
         resource_id, filter_ = self._resource_type_and_filter(
                                                                 resource_id_or_filter)
         url = self._url_for_resource(resource_type, resource_id, filter_)
         return self.fetch_document_by_url(url)
 
     async def _get_async(self, resource_type: str,
-                         resource_id_or_filter: 'Union[Modifier, str]'=None) -> 'Document':
+                         resource_id_or_filter: 'Union[BaseModifier, str]'=None) -> 'Document':
         resource_id, filter_ = self._resource_type_and_filter(
                                                                 resource_id_or_filter)
         url = self._url_for_resource(resource_type, resource_id, filter_)
         return await self.fetch_document_by_url_async(url)
 
     def get(self, resource_type: str,
-                 resource_id_or_filter: 'Union[Modifier, str]'=None) \
+                 resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
             -> 'Union[Awaitable[Document], Document]':
         """
         Request (GET) Document from server.
 
-        :param resource_id_or_filter: Resource id or Modifier instance to filter
+        :param resource_id_or_filter: Resource id or BaseModifier instance to filter
         resulting resources.
 
         If session is used with enable_async=True, this needs
@@ -364,18 +363,18 @@ class Session:
         else:
             return self._get_sync(resource_type, resource_id_or_filter)
 
-    def _iterate_sync(self, resource_type: str, filter: 'Modifier'=None) \
+    def _iterate_sync(self, resource_type: str, filter: 'BaseModifier'=None) \
             -> 'Iterator[ResourceObject]':
         doc = self.get(resource_type, filter)
         yield from doc._iterator_sync()
 
-    async def _iterate_async(self, resource_type: str, filter: 'Modifier'=None) \
+    async def _iterate_async(self, resource_type: str, filter: 'BaseModifier'=None) \
             -> 'AsyncIterator[ResourceObject]':
         doc = await self._get_async(resource_type, filter)
         async for res in doc._iterator_async():
             yield res
 
-    def iterate(self, resource_type: str, filter: 'Modifier'=None) \
+    def iterate(self, resource_type: str, filter: 'BaseModifier'=None) \
             -> 'Union[AsyncIterator[ResourceObject], Iterator[ResourceObject]]':
         """
         Request (GET) Document from server and iterate through resources.
@@ -385,7 +384,7 @@ class Session:
         If session is used with enable_async=True, this needs to iterated with
         async for.
 
-        :param filter: Modifier instance to filter resulting resources.
+        :param filter: BaseModifier instance to filter resulting resources.
         """
         if self.enable_async:
             return self._iterate_async(resource_type, filter)

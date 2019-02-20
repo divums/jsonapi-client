@@ -8,7 +8,7 @@ Session
 .. autoclass:: jsonapi_client.session.Session
    :members:
 
-.. automodule:: jsonapi_client.filter
+.. automodule:: jsonapi_client.modifiers
    :members:
 
 Document
