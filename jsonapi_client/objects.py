@@ -31,23 +31,57 @@
 # OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-import logging
 from itertools import chain
-from typing import Optional, Union, Awaitable, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Union, Awaitable, Dict, NamedTuple, Iterable
 from urllib.parse import urlparse
-
-from .common import AbstractJsonObject, ResourceTuple
-from .resourceobject import ResourceObject
 
 from .utils import jsonify_name
 
 if TYPE_CHECKING:
     from .document import Document
+    from .session import Session
+    from .resourceobject import ResourceObject
 
-logger = logging.getLogger(__name__)
+
+class ResourceTuple(NamedTuple):
+    id: str
+    type: str
 
 
-class Meta(AbstractJsonObject):
+class AbstractJsonApiObject:
+    """
+    Base for all JSON API specific objects
+    """
+    def __init__(self, session: 'Session', data: Union[dict, list]) -> None:
+        self._invalid = False
+        self._session = session
+        self._handle_data(data)
+
+    @property
+    def session(self):
+        return self._session
+
+    def _handle_data(self, data: Union[dict, list]) -> None:
+        """
+        Store data
+        """
+        raise NotImplementedError
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}: {str(self)} ({id(self)})>'
+
+    def __str__(self):
+        raise NotImplementedError
+
+    @property
+    def url(self) -> str:
+        raise NotImplementedError
+
+    def mark_invalid(self):
+        self._invalid = True
+
+
+class Meta(AbstractJsonApiObject):
     """
     Object type for meta data
 
@@ -66,7 +100,7 @@ class Meta(AbstractJsonObject):
         return str(self.meta)
 
 
-class Link(AbstractJsonObject):
+class Link(AbstractJsonApiObject):
     """
     Object type for a single link
 
@@ -115,7 +149,7 @@ class Link(AbstractJsonObject):
             return await self.session.fetch_document_by_url_async(self.url)
 
 
-class Links(AbstractJsonObject):
+class Links(AbstractJsonApiObject):
     """
     Object type for container of links
 
@@ -140,7 +174,7 @@ class Links(AbstractJsonObject):
         return str(self._links)
 
 
-class ResourceIdentifier(AbstractJsonObject):
+class ResourceIdentifier(AbstractJsonApiObject):
     """
     Object type for resource identifier
 
@@ -176,6 +210,3 @@ class ResourceIdentifier(AbstractJsonObject):
 
     def __bool__(self):
         return self.id is not None
-
-RESOURCE_TYPES = (ResourceObject, ResourceIdentifier, ResourceTuple)
-ResourceTypes = Union[ResourceObject, ResourceIdentifier, ResourceTuple]

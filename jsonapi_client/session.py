@@ -165,7 +165,7 @@ class Session:
     @staticmethod
     def _value_to_dict(value: 'Union[ResourceObject, ResourceIdentifier, ResourceTuple]',
                        res_types: 'List[str]') -> dict:
-        from .objects import RESOURCE_TYPES
+        from .resourceobject import RESOURCE_TYPES
 
         res_type = res_types[0] if len(res_types) == 1 else None
 
@@ -192,8 +192,7 @@ class Session:
         in fields dictionary.
 
         """
-        from .objects import RESOURCE_TYPES
-        from .resourceobject import ResourceObject
+        from .resourceobject import ResourceObject, RESOURCE_TYPES
 
         if fields is None:
             fields = {}

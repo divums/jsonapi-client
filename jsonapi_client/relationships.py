@@ -35,21 +35,26 @@ import collections
 import logging
 from typing import TYPE_CHECKING, Optional, List, Union, Iterable, Dict, Tuple, Awaitable
 
-from .common import AbstractJsonObject, RelationType, ResourceTuple
-from .objects import (Meta, Links, ResourceIdentifier, RESOURCE_TYPES)
-from .resourceobject import ResourceObject
-
-logger = logging.getLogger(__name__)
-
-R_IDENT_TYPES = Union[str, ResourceObject, ResourceIdentifier, ResourceTuple]
+from .objects import AbstractJsonApiObject, Meta, Links, ResourceIdentifier
 
 if TYPE_CHECKING:
     from .modifiers import BaseModifier
     from .document import Document
     from .session import Session
+    from .objects import ResourceTuple
+    from .resourceobject import ResourceObject
+
+    ResourceIdentifierTypes = Union[str, ResourceObject, ResourceIdentifier, ResourceTuple]
+
+logger = logging.getLogger(__name__)
 
 
-class AbstractRelationship(AbstractJsonObject):
+class RelationType:
+    TO_ONE = 'to-one'
+    TO_MANY = 'to-many'
+
+
+class AbstractRelationship(AbstractJsonApiObject):
     """
     Relationships are containers for ResourceObjects related to relationships.
     ResourceObjects are automatically fetched if not in async mode.
@@ -206,8 +211,9 @@ class AbstractRelationship(AbstractJsonObject):
     def __bool__(self):
         raise NotImplementedError
 
-    def _value_to_identifier(self, value: R_IDENT_TYPES, type_: str='') \
+    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', type_: str='') \
             -> 'Union[ResourceIdentifier, ResourceObject]':
+        from .resourceobject import RESOURCE_TYPES
         if isinstance(value, RESOURCE_TYPES):
             r_ident = ResourceIdentifier(self.session, {'id': value.id, 'type': value.type})
         else:
@@ -272,13 +278,13 @@ class SingleRelationship(AbstractRelationship):
             return None
         return self._resource_identifier.as_resource_identifier_dict()
 
-    def _value_to_identifier(self, value: R_IDENT_TYPES, type_: str='') \
+    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', type_: str='') \
             -> 'Union[ResourceIdentifier, ResourceObject]':
         if value is None:
             return None
         return super()._value_to_identifier(value, type_)
 
-    def set(self, new_value: R_IDENT_TYPES, type_: str='') -> None:
+    def set(self, new_value: 'ResourceIdentifierTypes', type_: str='') -> None:
 
         self._resource_identifier = self._value_to_identifier(new_value, type_)
         self.mark_dirty()
@@ -326,7 +332,7 @@ class MultiRelationship(AbstractRelationship):
     def as_json_resource_identifiers(self) -> List[dict]:
         return [res.as_resource_identifier_dict() for res in self._resource_identifiers]
 
-    def set(self, new_values: Iterable[R_IDENT_TYPES], type_: str=None) -> None:
+    def set(self, new_values: 'Iterable[ResourceIdentifierTypes]', type_: str=None) -> None:
         self._resource_identifiers = [self._value_to_identifier(value, type_)
                                       for value in new_values]
         self.mark_dirty()
@@ -338,7 +344,7 @@ class MultiRelationship(AbstractRelationship):
         self._resource_identifiers.clear()
         self.mark_dirty()
 
-    def add(self, new_value: Union[R_IDENT_TYPES, Iterable[R_IDENT_TYPES]], type_=None) -> None:
+    def add(self, new_value: 'Union[ResourceIdentifierTypes, Iterable[ResourceIdentifierTypes]]', type_=None) -> None:
         """
         Add new resources
         """
@@ -423,7 +429,7 @@ class LinkRelationship(AbstractRelationship):
     def url(self) -> str:
         return str(self.links.related)
 
-    def set(self, new_value: Union[Iterable[R_IDENT_TYPES], R_IDENT_TYPES],
+    def set(self, new_value: 'Union[Iterable[ResourceIdentifierTypes], ResourceIdentifierTypes]',
             type_: str='') -> None:
         if isinstance(new_value, collections.Iterable):
             if self.is_single:

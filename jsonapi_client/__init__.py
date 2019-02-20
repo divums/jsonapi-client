@@ -32,5 +32,5 @@
 #
 
 from .session import Session
-from .common import ResourceTuple
+from .objects import ResourceTuple
 from .modifiers import Filter, Include, Modifier

@@ -1476,7 +1476,7 @@ def test_relationship_manipulation_alternative_api(mock_req, mocked_fetch, artic
     #assert article.relationships.comments.value == [str(i) for i in [oc1.id, oc2.id]]
 
 
-    # Let's test also .fields AttributeProxy
+    # Let's test also .fields FieldProxy
     if article_schema:
         assert article.relationships.comments.type == 'comments'
         article.fields.comments = ['7', '6']  # to many

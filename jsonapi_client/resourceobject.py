@@ -35,7 +35,8 @@ import logging
 from itertools import chain
 from typing import Set, Optional, Awaitable, Union, Iterable, TYPE_CHECKING
 
-from .common import AbstractJsonObject, AttributeProxy, RelationType
+from .objects import AbstractJsonApiObject, ResourceIdentifier, ResourceTuple
+from .relationships import RelationType
 from .exceptions import ValidationError, DocumentInvalid
 from .http import HttpMethod, HttpStatus
 from .utils import pythonify_names, jsonify_name, cached_property
@@ -46,6 +47,34 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .session import Schema, Session
+
+
+class FieldProxy:
+    """
+    Field proxy used in ResourceObject.fields etc.
+    """
+    def __init__(self, target_object=None):
+        self._target_object = target_object
+
+    def __getitem__(self, item):
+        return self._target_object[item]
+
+    def __setitem__(self, key, value):
+        self._target_object[key] = value
+
+    def __getattr__(self, item):
+        try:
+            return self[jsonify_name(item)]
+        except KeyError:
+            raise AttributeError
+
+    def __setattr__(self, key, value):
+        if key == '_target_object':
+            return super().__setattr__(key, value)
+        try:
+            self[jsonify_name(key)] = value
+        except KeyError:
+            raise AttributeError
 
 
 class AttributeDict(dict):
@@ -267,7 +296,8 @@ class RelationshipDict(dict):
         """
         self._resource = new_resource
 
-    def _determine_class(self, data: dict, relation_type: str=None):
+    @staticmethod
+    def _determine_class(data: dict, relation_type: str=None):
         """
         From data and/or provided relation_type, determine Relationship class
         to be used.
@@ -322,7 +352,7 @@ class RelationshipDict(dict):
         return any(r.is_dirty for r in self.values())
 
 
-class ResourceObject(AbstractJsonObject):
+class ResourceObject(AbstractJsonApiObject):
     """
     Basic JSON API resourceobject type. Field (attribute and relationship) access directly
     via instance attributes (__getattr__). In case of namespace collisions, there is also
@@ -344,7 +374,7 @@ class ResourceObject(AbstractJsonObject):
         """
         Proxy to all fields (both attributes and relationship target resources)
         """
-        class Proxy(AttributeProxy):
+        class Proxy(FieldProxy):
             def __getitem__(proxy, item):
                 rv = self._attributes.get(item, NOT_FOUND)
                 if rv is NOT_FOUND:
@@ -369,14 +399,14 @@ class ResourceObject(AbstractJsonObject):
         """
         Proxy to all attributes (not relationships)
         """
-        return AttributeProxy(self._attributes)
+        return FieldProxy(self._attributes)
 
     @cached_property
     def relationships(self):
         """
         Proxy to relationship objects
         """
-        class Proxy(AttributeProxy):
+        class Proxy(FieldProxy):
             def __setitem__(proxy, key, value):
                 rel = self._relationships[key]
                 rel.set(value)
@@ -389,7 +419,7 @@ class ResourceObject(AbstractJsonObject):
         If async enabled, proxy to relationship objects.
         If async disabled, proxy to resources behind relationships.
         """
-        class Proxy(AttributeProxy):
+        class Proxy(FieldProxy):
             def __getitem__(proxy, item):
                 rel = self.relationships[item]
                 if self.session.enable_async:
@@ -648,4 +678,7 @@ class ResourceObject(AbstractJsonObject):
 
     def as_resource_identifier_dict(self) -> dict:
         return {'id': self.id, 'type': self.type}
+
+
+RESOURCE_TYPES = (ResourceObject, ResourceIdentifier, ResourceTuple)
 

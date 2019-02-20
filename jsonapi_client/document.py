@@ -34,10 +34,9 @@
 import logging
 from typing import TYPE_CHECKING, Iterator, AsyncIterator, List
 
-from .common import AbstractJsonObject
-from .exceptions import ValidationError, DocumentError
-from .objects import Meta, Links
+from .objects import AbstractJsonApiObject, Meta, Links
 from .resourceobject import ResourceObject
+from .exceptions import ValidationError, DocumentError
 
 if TYPE_CHECKING:
     from .session import Session
@@ -46,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Document(AbstractJsonObject):
+class Document(AbstractJsonApiObject):
     """
     Top level of JSON API document.
     Contains one or more ResourceObjects.
