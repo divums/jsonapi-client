@@ -35,10 +35,10 @@ import logging
 from itertools import chain
 from typing import Set, Optional, Awaitable, Union, Iterable, TYPE_CHECKING
 
-from .common import (jsonify_attribute_name, AbstractJsonObject,
-                     dejsonify_attribute_names, HttpMethod, HttpStatus, AttributeProxy,
-                     cached_property, RelationType)
+from .common import AbstractJsonObject, AttributeProxy, RelationType
 from .exceptions import ValidationError, DocumentInvalid
+from .http import HttpMethod, HttpStatus
+from .utils import pythonify_names, jsonify_name, cached_property
 
 NOT_FOUND = object()
 
@@ -116,7 +116,7 @@ class AttributeDict(dict):
         :param attr_name: Name of this map object.
         """
         self._check_invalid()
-        name = jsonify_attribute_name(attr_name)
+        name = jsonify_name(attr_name)
         self[name] = AttributeDict(data={}, name=name, parent=self, resource=self._resource)
 
     def _check_invalid(self):
@@ -124,7 +124,7 @@ class AttributeDict(dict):
             raise DocumentInvalid('Resource has been invalidated.')
 
     def __getattr__(self, name):
-        name = jsonify_attribute_name(name)
+        name = jsonify_name(name)
         if name not in self:
             raise AttributeError(f'No such attribute '
                                  f'{self._resource.type}.{self._full_name}.{name}')
@@ -138,7 +138,7 @@ class AttributeDict(dict):
     def __setattr__(self, name, value):
         if name.startswith('_'):
             return super().__setattr__(name, value)
-        name = jsonify_attribute_name(name)
+        name = jsonify_name(name)
         self[name] = value
 
     def mark_dirty(self, name: str):
@@ -220,7 +220,7 @@ class AttributeDict(dict):
         """
         Pythonized version of contained keys (attribute names).
         """
-        yield from dejsonify_attribute_names(self.keys())
+        yield from pythonify_names(self.keys())
 
 
 class RelationshipDict(dict):
@@ -315,7 +315,7 @@ class RelationshipDict(dict):
         """
         Pythonized version of contained keys (relationship names)
         """
-        yield from dejsonify_attribute_names(self.keys())
+        yield from pythonify_names(self.keys())
 
     @property
     def is_dirty(self) -> bool:
@@ -525,14 +525,14 @@ class ResourceObject(AbstractJsonObject):
         return url
 
     def _post_commit(self, status, result, location):
-        if status in HttpStatus.HAS_RESOURCES:
+        if HttpStatus.has_resource(status):
             self._update_resource(result, location)
 
         # If no resources are returned (which is the case when 202 (Accepted)
         # is received for PATCH, for example).
         self.mark_clean()
 
-        if status == HttpStatus.ACCEPTED_202:
+        if status == HttpStatus.HTTP_202_ACCEPTED:
             return self.session.read(result, location, no_cache=True).resource
 
     async def _commit_async(self, url: str= '', meta=None) -> None:

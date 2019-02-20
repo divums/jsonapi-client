@@ -37,12 +37,11 @@ import logging
 from itertools import chain
 from typing import TYPE_CHECKING, Set, Optional, Tuple, Dict, Union, Awaitable, AsyncIterator, Iterator, List
 from urllib.parse import ParseResult, urlparse
-
 import jsonschema
 
-from .common import jsonify_attribute_name, error_from_response, \
-    HttpStatus, HttpMethod
+from .http import error_from_response, HttpStatus, HttpMethod, HTTP_HEADER_FIELDS
 from .exceptions import DocumentError, AsyncError
+from .utils import jsonify_name
 
 if TYPE_CHECKING:
     from asyncio import AbstractEventLoop
@@ -206,7 +205,7 @@ class Session:
 
         for key, value in more_fields.items():
             if key not in fields:
-                key = jsonify_attribute_name(key)
+                key = jsonify_name(key)
             props = schema['properties'].get(key, {})
             if 'relation' in props:
                 res_types = props['resource']
@@ -486,7 +485,7 @@ class Session:
         parsed_url = urlparse(url)
         logger.info('Fetching document from url %s', parsed_url)
         response = requests.get(parsed_url.geturl(), **self._request_kwargs)
-        if response.status_code == HttpStatus.OK_200:
+        if response.status_code == HttpStatus.HTTP_200_OK:
             return response.json()
         else:
 
@@ -506,16 +505,15 @@ class Session:
         logger.info('Fetching document from url %s', parsed_url)
         async with self._aiohttp_session.get(parsed_url.geturl(),
                                              **self._request_kwargs) as response:
-            if response.status == HttpStatus.OK_200:
-                return await response.json(content_type='application/vnd.api+json')
+            if response.status == HttpStatus.HTTP_200_OK:
+                return await response.json(content_type=HTTP_HEADER_FIELDS['Content-Type'])
             else:
                 raise DocumentError(f'Error {response.status_code}: '
                                     f'{error_from_response(response)}',
                                     errors={'status_code': response.status_code},
                                     response=response)
 
-    def http_request(self, http_method: str, url: str, send_json: dict,
-                     expected_statuses: List[str]=None) -> Tuple[int, dict, str]:
+    def http_request(self, http_method: str, url: str, send_json: dict) -> Tuple[int, dict, str]:
         """
         Internal use.
 
@@ -524,13 +522,11 @@ class Session:
         self.assert_sync()
         import requests
         logger.debug('%s request: %s', http_method.upper(), send_json)
-        expected_statuses = expected_statuses or HttpStatus.ALL_OK
-
         response = requests.request(http_method, url, json=send_json,
-                                    headers={'Content-Type': 'application/vnd.api+json'},
+                                    headers=HTTP_HEADER_FIELDS,
                                     **self._request_kwargs)
 
-        if response.status_code not in expected_statuses:
+        if not HttpStatus.is_success(response.status_code):  # TODO: handle HTTP 3xx
             raise DocumentError(f'Could not {http_method.upper()} '
                                 f'({response.status_code}): '
                                 f'{error_from_response(response)}',
@@ -546,8 +542,7 @@ class Session:
                 self,
                 http_method: str,
                 url: str,
-                send_json: dict,
-                expected_statuses: List[str]=None) \
+                send_json: dict) \
             -> Tuple[int, dict, str]:
         """
         Internal use. Async version.
@@ -557,14 +552,13 @@ class Session:
 
         self.assert_async()
         logger.debug('%s request: %s', http_method.upper(), send_json)
-        expected_statuses = expected_statuses or HttpStatus.ALL_OK
-        content_type = '' if http_method == HttpMethod.DELETE else 'application/vnd.api+json'
+        content_type = '' if http_method == HttpMethod.DELETE else HTTP_HEADER_FIELDS['Content-Type']
         async with self._aiohttp_session.request(
                 http_method, url, data=json.dumps(send_json),
-                headers={'Content-Type':'application/vnd.api+json'},
+                headers=HTTP_HEADER_FIELDS,
                 **self._request_kwargs) as response:
 
-            if response.status not in expected_statuses:
+            if not HttpStatus.is_success(response.status_code):  # TODO: handle HTTP 3xx
                 raise DocumentError(f'Could not {http_method.upper()} '
                                     f'({response.status}): '
                                     f'{error_from_response(response)}',
