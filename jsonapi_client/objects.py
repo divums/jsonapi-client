@@ -132,21 +132,15 @@ class Link(AbstractJsonApiObject):
     def __str__(self) -> str:
         return self.url if self.href else ''
 
-    def fetch_sync(self) -> 'Optional[Document]':
-        self.session.assert_sync()
-        if self:
-            return self.session.fetch_document_by_url(self.url)
-
-    def fetch(self):
-        if self.session.enable_async:
-            return self.fetch_async()
+    def fetch(self) -> 'Union[Awaitable[Document], Document]':
+        if self.session.is_async:
+            self.session._assert_async()
+            if self:
+                return self.session._fetch_document_by_url_async(self.url)
         else:
-            return self.fetch_sync()
-
-    async def fetch_async(self) -> 'Optional[Document]':
-        self.session.assert_async()
-        if self:
-            return await self.session.fetch_document_by_url_async(self.url)
+            self.session._assert_sync()
+            if self:
+                return self.session._fetch_document_by_url_sync(self.url)
 
 
 class Links(AbstractJsonApiObject):
@@ -188,19 +182,12 @@ class ResourceIdentifier(AbstractJsonApiObject):
     def __str__(self) -> str:
         return f'{self.type}: {self.id}'
 
-    def fetch_sync(self, cache_only=True) -> 'ResourceObject':
-        return self.session.fetch_resource_by_resource_identifier(self, cache_only)
-
-    async def fetch_async(self, cache_only=True) -> 'ResourceObject':
-        return await self.session.fetch_resource_by_resource_identifier_async(self,
-                                                                              cache_only)
-
     def fetch(self, cache_only=True) \
             -> 'Union[Awaitable[ResourceObject], ResourceObject]':
-        if self.session.enable_async:
-            return self.fetch_async(cache_only)
+        if self.session.is_async:
+            return self.session._fetch_resource_by_resource_identifier_sync(self, cache_only)
         else:
-            return self.fetch_sync(cache_only)
+            return self.session._fetch_resource_by_resource_identifier_async(self, cache_only)
 
     def as_resource_identifier_dict(self) -> Optional[Dict[str, str]]:
         return {'id': self.id, 'type': self.type} if self.id else None

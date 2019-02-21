@@ -35,8 +35,7 @@ import logging
 from itertools import chain
 from typing import Set, Optional, Awaitable, Union, Iterable, TYPE_CHECKING, Any, Dict
 
-from .objects import AbstractJsonApiObject, ResourceIdentifier, ResourceTuple
-from .relationships import RelationType
+from .objects import AbstractJsonApiObject, Links, Meta
 from .exceptions import ValidationError, DocumentInvalid
 from .http import HttpMethod, HttpStatus
 from .utils import pythonify_names, jsonify_name, cached_property
@@ -309,11 +308,11 @@ class RelationshipDict(dict):
         if 'data' in data:
             relationship_data = data['data']
             if isinstance(relationship_data, list):
-                if relation_type and relation_type != RelationType.TO_MANY:
+                if relation_type and relation_type != rel.RelationType.TO_MANY:
                     logger.error('Conflicting information about relationship')
                 return rel.ToManyRelationship
             elif relationship_data is None or isinstance(relationship_data, dict):
-                if relation_type and relation_type != RelationType.TO_ONE:
+                if relation_type and relation_type != rel.RelationType.TO_ONE:
                     logger.error('Conflicting information about relationship')
                 return rel.ToOneRelationship
             else:
@@ -322,9 +321,9 @@ class RelationshipDict(dict):
             return rel.LinkRelationship
         elif 'meta' in data:
             return rel.MetaRelationship
-        elif relation_type == RelationType.TO_MANY:
+        elif relation_type == rel.RelationType.TO_MANY:
             return rel.ToManyRelationship
-        elif relation_type == RelationType.TO_ONE:
+        elif relation_type == rel.RelationType.TO_ONE:
             return rel.ToOneRelationship
         else:
             raise ValidationError('Must have either links, data or meta in relationship')
@@ -418,13 +417,13 @@ class ResourceObject(AbstractJsonApiObject):
     @cached_property
     def relationship_resource(self) -> 'FieldProxy':
         """
-        If async enabled, proxy to relationship objects.
-        If async disabled, proxy to resources behind relationships.
+        If in async mode, proxy to relationship objects.
+        Otherwise, proxy to resources behind relationships.
         """
         class Proxy(FieldProxy):
             def __getitem__(proxy, item):
                 rel = self.relationships[item]
-                if self.session.enable_async:
+                if self.session.is_async:
                     # With async it's more convenient to access Relationship object
                     return self.relationships[item]
 
@@ -436,7 +435,6 @@ class ResourceObject(AbstractJsonApiObject):
         return Proxy()
 
     def _handle_data(self, data: dict) -> None:
-        from .objects import Links, Meta
         self.id = data['id']
         self.type = data['type']
         self.links = Links(self.session, data.get('links', {}))
@@ -569,24 +567,24 @@ class ResourceObject(AbstractJsonApiObject):
             return self.session.read(result, location, no_cache=True).resource
 
     async def _commit_async(self, url: str= '', meta=None) -> None:
-        self.session.assert_async()
+        self.session._assert_async()
         if self._delete:
             return await self._perform_delete_async(url)
 
         url = self._pre_commit(url)
-        status, result, location = await self.session.http_request_async(
+        status, result, location = await self.session._http_request_async(
                                                 self._http_method, url,
                                                 self._commit_data(meta))
         return self._post_commit(status, result, location)
 
     def _commit_sync(self, url: str= '', meta: dict=None) -> 'None':
-        self.session.assert_sync()
+        self.session._assert_sync()
         if self._delete:
             return self._perform_delete(url)
 
         url = self._pre_commit(url)
-        status, result, location = self.session.http_request(self._http_method, url,
-                                                             self._commit_data(meta))
+        status, result, location = self.session._http_request_sync(self._http_method, url,
+                                                                   self._commit_data(meta))
         return self._post_commit(status, result, location)
 
     def commit(self, custom_url: str = '', meta: dict = None) \
@@ -599,7 +597,7 @@ class ResourceObject(AbstractJsonApiObject):
 
         If in async mode, this needs to be awaited.
         """
-        if self.session.enable_async:
+        if self.session.is_async:
             return self._commit_async(custom_url, meta)
         else:
             return self._commit_sync(custom_url, meta)
@@ -624,13 +622,13 @@ class ResourceObject(AbstractJsonApiObject):
         self.session.add_resources(self)
 
     def _refresh_sync(self) -> None:
-        self.session.assert_sync()
-        new_res = self.session.fetch_resource_by_resource_identifier(self, force=True)
+        self.session._assert_sync()
+        new_res = self.session._fetch_resource_by_resource_identifier_sync(self, force=True)
         self._update_resource(new_res)
 
     async def _refresh_async(self) -> None:
-        self.session.assert_async()
-        new_res = await self.session.fetch_resource_by_resource_identifier_async(
+        self.session._assert_async()
+        new_res = await self.session._fetch_resource_by_resource_identifier_async(
                                                                             self,
                                                                             force=True)
         self._update_resource(new_res)
@@ -641,7 +639,7 @@ class ResourceObject(AbstractJsonApiObject):
 
         If in async mode, this needs to be awaited.
         """
-        if self.session.enable_async:
+        if self.session.is_async:
             return self._refresh_async()
         else:
             return self._refresh_sync()
@@ -654,12 +652,12 @@ class ResourceObject(AbstractJsonApiObject):
 
     def _perform_delete(self, url='') -> None:
         url = url or self.url
-        self.session.http_request(HttpMethod.DELETE, url, {})
+        self.session._http_request_sync(HttpMethod.DELETE, url, {})
         self.session.remove_resource(self)
 
     async def _perform_delete_async(self, url=''):
         url = url or self.url
-        await self.session.http_request_async(HttpMethod.DELETE, url, {})
+        await self.session._http_request_async(HttpMethod.DELETE, url, {})
         self.session.remove_resource(self)
 
     def mark_clean(self) -> None:
@@ -681,6 +679,3 @@ class ResourceObject(AbstractJsonApiObject):
 
     def as_resource_identifier_dict(self) -> Dict[str, str]:
         return {'id': self.id, 'type': self.type}
-
-
-RESOURCE_TYPES = (ResourceObject, ResourceIdentifier, ResourceTuple)

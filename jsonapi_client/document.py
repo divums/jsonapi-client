@@ -113,6 +113,7 @@ class Document(AbstractJsonApiObject):
 
     def _iterator_sync(self) -> 'Iterator[ResourceObject]':
         yield from self.resources
+
         if self.links.next:
             next_doc = self.links.next.fetch()
             yield from next_doc.iterator()
@@ -133,7 +134,7 @@ class Document(AbstractJsonApiObject):
 
         If Session is in async mode, this needs to be used with async for.
         """
-        if self.session.enable_async:
+        if self.session.is_async:
             return self._iterator_async()
         else:
             return self._iterator_sync()

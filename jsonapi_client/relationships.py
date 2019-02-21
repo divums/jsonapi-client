@@ -35,14 +35,13 @@ import collections
 import logging
 from typing import TYPE_CHECKING, Optional, List, Union, Iterable, Dict, Tuple, Awaitable
 
-from .objects import AbstractJsonApiObject, Meta, Links, ResourceIdentifier
+from .objects import AbstractJsonApiObject, Meta, Links, ResourceIdentifier, ResourceTuple
+from .resourceobject import ResourceObject
 
 if TYPE_CHECKING:
     from .modifiers import BaseModifier
     from .document import Document
     from .session import Session
-    from .objects import ResourceTuple
-    from .resourceobject import ResourceObject
 
     ResourceIdentifierTypes = Union[str, ResourceObject, ResourceIdentifier, ResourceTuple]
 
@@ -89,11 +88,11 @@ class AbstractRelationship(AbstractJsonApiObject):
 
     def _modify_sync(self, modifier: 'BaseModifier') -> 'Document':
         url = modifier.url_with_modifiers(self.url)
-        return self.session.fetch_document_by_url(url)
+        return self.session._fetch_document_by_url_sync(url)
 
     async def _modify_async(self, modifier: 'BaseModifier'):
         url = modifier.url_with_modifiers(self.url)
-        return self.session.fetch_document_by_url_async(url)
+        return self.session._fetch_document_by_url_async(url)
 
     def filter(self, filter: 'BaseModifier') -> 'Union[Awaitable[Document], Document]':
         """
@@ -101,7 +100,7 @@ class AbstractRelationship(AbstractJsonApiObject):
 
         If in async mode, this needs to be awaited.
         """
-        if self.session.enable_async:
+        if self.session.is_async:
             return self._modify_async(filter)
         else:
             return self._modify_sync(filter)
@@ -136,7 +135,7 @@ class AbstractRelationship(AbstractJsonApiObject):
         In blocking (sync) mode this is called automatically when .resource or
         .resources is accessed.
         """
-        if self.session.enable_async:
+        if self.session.is_async:
             return self._fetch_async()
         else:
             return self._fetch_sync()
@@ -186,7 +185,7 @@ class AbstractRelationship(AbstractJsonApiObject):
     def is_fetched(self) -> bool:
         return bool(self._resources)
 
-    def set(self, new_value, type_=None) -> None:
+    def set(self, new_value, resource_type=None) -> None:
         """
         This function is used when new values is set as targets of this relationship.
 
@@ -213,13 +212,12 @@ class AbstractRelationship(AbstractJsonApiObject):
     def __bool__(self):
         raise NotImplementedError
 
-    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', type_: str=None) \
+    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', resource_type: str=None) \
             -> 'Union[ResourceIdentifier, ResourceObject]':
-        from .resourceobject import RESOURCE_TYPES
-        if isinstance(value, RESOURCE_TYPES):
+        if isinstance(value, (ResourceObject, ResourceIdentifier, ResourceTuple)):
             data = {'id': value.id, 'type': value.type}
         else:
-            data = {'id': value, 'type': type_ or self.type}
+            data = {'id': value, 'type': resource_type or self.type}
         res_id = ResourceIdentifier(self.session, data)
         res_obj = self._resources and self._resources.get((res_id.type, res_id.id))
         return res_obj or res_id
@@ -239,22 +237,22 @@ class ToOneRelationship(AbstractRelationship):
         del self._resource_data  # This is not intended to be used after this
 
     async def _fetch_async(self) -> 'List[Union[None, ResourceObject]]':
-        self.session.assert_async()
+        self.session._assert_async()
         res_id = self._resource_identifier
         if res_id is None:
             self._resources = {None: None}
         else:
-            res = await self.session.fetch_resource_by_resource_identifier_async(res_id)
+            res = await self.session._fetch_resource_by_resource_identifier_async(res_id)
             self._resources = {(res.type, res.id): res}
         return list(self._resources.values())
 
-    def _fetch_sync(self) -> 'List[ResourceObject]':
-        self.session.assert_sync()
+    def _fetch_sync(self) -> 'List[Union[None, ResourceObject]]':
+        self.session._assert_sync()
         res_id = self._resource_identifier
         if res_id is None:
             self._resources = {None: None}
         else:
-            res = self.session.fetch_resource_by_resource_identifier(res_id)
+            res = self.session._fetch_resource_by_resource_identifier_sync(res_id)
             self._resources = {(res.type, res.id): res}
         return list(self._resources.values())
 
@@ -280,15 +278,15 @@ class ToOneRelationship(AbstractRelationship):
             return None
         return self._resource_identifier.as_resource_identifier_dict()
 
-    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', type_: str='') \
-            -> 'Union[ResourceIdentifier, ResourceObject]':
+    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', resource_type: str= '') \
+            -> 'Union[None, ResourceIdentifier, ResourceObject]':
         if value is None:
             return None
-        return super()._value_to_identifier(value, type_)
+        return super()._value_to_identifier(value, resource_type)
 
-    def set(self, new_value: 'ResourceIdentifierTypes', type_: str=None) -> None:
+    def set(self, new_value: 'ResourceIdentifierTypes', resource_type: str=None) -> None:
 
-        self._resource_identifier = self._value_to_identifier(new_value, type_)
+        self._resource_identifier = self._value_to_identifier(new_value, resource_type)
         self.mark_dirty()
 
 
@@ -308,18 +306,18 @@ class ToManyRelationship(AbstractRelationship):
         return False
 
     async def _fetch_async(self) -> 'List[ResourceObject]':
-        self.session.assert_async()
+        self.session._assert_async()
         self._resources = {}
         for res_id in self._resource_identifiers:
-            res = await self.session.fetch_resource_by_resource_identifier_async(res_id)
+            res = await self.session._fetch_resource_by_resource_identifier_async(res_id)
             self._resources[(res.type, res.id)] = res
         return list(self._resources.values())
 
     def _fetch_sync(self) -> 'List[ResourceObject]':
-        self.session.assert_sync()
+        self.session._assert_sync()
         self._resources = {}
         for res_id in self._resource_identifiers:
-            res = self.session.fetch_resource_by_resource_identifier(res_id)
+            res = self.session._fetch_resource_by_resource_identifier_sync(res_id)
             self._resources[(res.type, res.id)] = res
         return list(self._resources.values())
 
@@ -334,8 +332,11 @@ class ToManyRelationship(AbstractRelationship):
     def as_json_resource_identifiers(self) -> List[dict]:
         return [res.as_resource_identifier_dict() for res in self._resource_identifiers]
 
-    def set(self, new_values: 'Iterable[ResourceIdentifierTypes]', type_: str=None) -> None:
-        self._resource_identifiers = [self._value_to_identifier(value, type_)
+    def set(self,
+            new_values: 'Iterable[ResourceIdentifierTypes]',
+            resource_type: str=None) \
+            -> None:
+        self._resource_identifiers = [self._value_to_identifier(value, resource_type)
                                       for value in new_values]
         self.mark_dirty()
 
@@ -346,17 +347,17 @@ class ToManyRelationship(AbstractRelationship):
         self._resource_identifiers.clear()
         self.mark_dirty()
 
-    def add(self, new_value: 'Union[ResourceIdentifierTypes, Iterable[ResourceIdentifierTypes]]', type_=None) -> None:
+    def add(self, new_value: 'Union[ResourceIdentifierTypes, Iterable[ResourceIdentifierTypes]]', resource_type=None) -> None:
         """
         Add new resources
         """
-        if type_ is None:
-            type_ = self.type
+        if resource_type is None:
+            resource_type = self.type
         if isinstance(new_value, collections.Iterable):
             self._resource_identifiers.extend(
-                [self._value_to_identifier(val, type_) for val in new_value])
+                [self._value_to_identifier(val, resource_type) for val in new_value])
         else:
-            self._resource_identifiers.append(self._value_to_identifier(new_value, type_))
+            self._resource_identifiers.append(self._value_to_identifier(new_value, resource_type))
 
         self.mark_dirty()
 
@@ -392,17 +393,17 @@ class LinkRelationship(AbstractRelationship):
         return self._relation_type and self._relation_type == RelationType.TO_ONE
 
     async def _fetch_async(self) -> 'List[ResourceObject]':
-        self.session.assert_async()
+        self.session._assert_async()
         self._document = \
-            await self.session.fetch_document_by_url_async(self.links.related.url)
+            await self.session._fetch_document_by_url_async(self.links.related.url)
         if self.session.use_relationship_iterator:
             return self._document.iterator()
         self._resources = {(r.type, r.id): r for r in self._document.resources}
         return list(self._resources.values())
 
     def _fetch_sync(self) -> 'List[ResourceObject]':
-        self.session.assert_sync()
-        self._document = self.session.fetch_document_by_url(self.links.related.url)
+        self.session._assert_sync()
+        self._document = self.session._fetch_document_by_url_sync(self.links.related.url)
         if self.session.use_relationship_iterator:
             return self._document.iterator()
         self._resources = {(r.type, r.id): r for r in self._document.resources}
@@ -428,19 +429,21 @@ class LinkRelationship(AbstractRelationship):
     def url(self) -> str:
         return str(self.links.related)
 
-    def set(self, new_value: 'Union[Iterable[ResourceIdentifierTypes], ResourceIdentifierTypes]',
-            type_: str='') -> None:
+    def set(self,
+            new_value: 'Union[Iterable[ResourceIdentifierTypes], ResourceIdentifierTypes]',
+            resource_type: str=None) \
+            -> None:
         if isinstance(new_value, collections.Iterable):
             if self.is_single:
                 logger.warning('This should contain list of resources, '
                                'but only one is given')
-            resources = [self._value_to_identifier(val, type_) for val in new_value]
+            resources = [self._value_to_identifier(val, resource_type) for val in new_value]
             self._resources = {(r.type, r.id):r for r in resources}
         else:
             if not self.is_single:
                 logger.warning('This should contain only 1 resource, '
                                'but a list of values is given')
-            res = self._value_to_identifier(new_value, type_)
+            res = self._value_to_identifier(new_value, resource_type)
             self._resources = {(res.type, res.id): res}
         self.mark_dirty()
 

@@ -160,7 +160,7 @@ def load(filename):
 
 @pytest.fixture
 def mock_req(mocker):
-    m1 = mocker.patch('jsonapi_client.session.Session.http_request')
+    m1 = mocker.patch('jsonapi_client.session.Session._http_request_sync')
     m1.return_value = (201, {}, 'location')
     return m1
 
@@ -174,7 +174,7 @@ def mock_req_async(mocker):
             super().__call__(*args)
             return rv
 
-    m2 = mocker.patch('jsonapi_client.session.Session.http_request_async', new_callable=MockedReqAsync)
+    m2 = mocker.patch('jsonapi_client.session.Session._http_request_async', new_callable=MockedReqAsync)
     return m2
 
 
@@ -194,7 +194,7 @@ def mocked_fetch(mocker):
         async def __call__(self, url):
             return mock_fetch(url)
 
-    m1 = mocker.patch('jsonapi_client.session.Session._fetch_json', new_callable=MockedFetch)
+    m1 = mocker.patch('jsonapi_client.session.Session._fetch_json_sync', new_callable=MockedFetch)
     m2 = mocker.patch('jsonapi_client.session.Session._fetch_json_async', new_callable=MockedFetchAsync)
     return
 
@@ -220,7 +220,7 @@ def test_initialization(mocked_fetch, article_schema):
 
 @pytest.mark.asyncio
 async def test_initialization_async(mocked_fetch, article_schema):
-    s = Session('http://localhost:8080', enable_async=True, schema=article_schema)
+    s = Session('http://localhost:8080', is_async=True, schema=article_schema)
     article = await s.get('articles')
     assert s.resources_by_link['http://example.com/articles/1'] is \
            s.resources_by_resource_identifier[('articles', '1')]
@@ -252,7 +252,7 @@ def test_basic_attributes(mocked_fetch, article_schema):
 
 @pytest.mark.asyncio
 async def test_basic_attributes_async(mocked_fetch, article_schema):
-    s = Session('http://localhost:8080', enable_async=True, schema=article_schema)
+    s = Session('http://localhost:8080', is_async=True, schema=article_schema)
     doc = await s.get('articles')
     assert len(doc.resources) == 3
     article = doc.resources[0]
@@ -304,7 +304,7 @@ def test_relationships_single(mocked_fetch, article_schema):
 
 @pytest.mark.asyncio
 async def test_relationships_iterator_async(mocked_fetch, article_schema):
-    s = Session('http://localhost:8080', enable_async=True, schema=article_schema, use_relationship_iterator=True)
+    s = Session('http://localhost:8080', is_async=True, schema=article_schema, use_relationship_iterator=True)
     doc = await s.get('articles')
     article, article2, article3 = doc.resources
     comments = article.comments
@@ -314,7 +314,7 @@ async def test_relationships_iterator_async(mocked_fetch, article_schema):
 
 @pytest.mark.asyncio
 async def test_relationships_single_async(mocked_fetch, article_schema):
-    s = Session('http://localhost:8080', enable_async=True, schema=article_schema)
+    s = Session('http://localhost:8080', is_async=True, schema=article_schema)
     doc = await s.get('articles')
     article, article2, article3 = doc.resources
 
@@ -386,7 +386,7 @@ def test_relationships_multi(mocked_fetch, article_schema):
 
 @pytest.mark.asyncio
 async def test_relationships_multi_async(mocked_fetch, article_schema):
-    s = Session('http://localhost:8080', enable_async=True, schema=article_schema)
+    s = Session('http://localhost:8080', is_async=True, schema=article_schema)
     doc = await s.get('articles')
     article = doc.resource
     comments = article.comments
@@ -450,7 +450,7 @@ def test_fetch_external_resources(mocked_fetch, article_schema):
 
 @pytest.mark.asyncio
 async def test_fetch_external_resources_async(mocked_fetch, article_schema):
-    s = Session('http://localhost:8080', enable_async=True, schema=article_schema)
+    s = Session('http://localhost:8080', is_async=True, schema=article_schema)
     doc = await s.get('articles')
     article = doc.resource
     comments = article.comments
@@ -496,7 +496,7 @@ def test_error_404(mocked_fetch, api_schema):
 
 @pytest.mark.asyncio
 async def test_error_404_async(mocked_fetch, api_schema):
-    s = Session('http://localhost:8080/api', enable_async=True, schema=api_schema)
+    s = Session('http://localhost:8080/api', is_async=True, schema=api_schema)
     documents = await s.get('leases')
     d1 = documents.resources[1]
 
@@ -576,7 +576,7 @@ def test_relationships_with_context_manager(mocked_fetch, api_schema):
 
 @pytest.mark.asyncio
 async def test_relationships_with_context_manager_async_async(mocked_fetch, api_schema):
-    async with Session('http://localhost:8080/api', schema=api_schema, enable_async=True) as s:
+    async with Session('http://localhost:8080/api', is_async=True, schema=api_schema) as s:
         documents = await s.get('leases')
         d1 = documents.resources[0]
 
@@ -666,7 +666,7 @@ def test_more_relationships(mocked_fetch, api_schema):
 
 @pytest.mark.asyncio
 async def test_more_relationships_async_fetch(mocked_fetch, api_schema):
-    s = Session('http://localhost:8080/api', enable_async=True, schema=api_schema)
+    s = Session('http://localhost:8080/api', is_async=True, schema=api_schema)
     documents = await s.get('leases')
     d1 = documents.resources[0]
     dird = dir(d1)
@@ -853,7 +853,7 @@ def test_result_pagination_iteration(mocked_fetch, api_schema):
 
 @pytest.mark.asyncio
 async def test_result_pagination_iteration_async(mocked_fetch, api_schema):
-    s = Session('http://localhost:8080/', schema=api_schema, enable_async=True)
+    s = Session('http://localhost:8080/', is_async=True, schema=api_schema)
 
     leases = [r async for r in s.iterate('test_leases')]
     assert len(leases) == 6
@@ -997,7 +997,7 @@ def test_posting_successfull(mock_req):
 
 @pytest.mark.asyncio
 async def test_posting_successfull_async(mock_req_async, mock_update_resource):
-    s = Session('http://localhost:80801/api', schema=api_schema_all, enable_async=True)
+    s = Session('http://localhost:80801/api', is_async=True, schema=api_schema_all)
     a = s.create('leases')
     assert a.is_dirty
     a.lease_id = '1'
@@ -1173,7 +1173,7 @@ def test_posting_successfull_without_schema(mock_req):
 
 @pytest.mark.asyncio
 async def test_posting_successfull_without_schema(mock_req_async, mock_update_resource):
-    s = Session('http://localhost:80801/api', enable_async=True)
+    s = Session('http://localhost:80801/api', is_async=True)
     a = s.create('leases')
 
     a.lease_id = '1'
@@ -1326,7 +1326,7 @@ def test_relationship_manipulation(mock_req, article_schema, mocked_fetch, mock_
 
 @pytest.mark.asyncio
 async def test_relationship_manipulation_async(mock_req_async, mocked_fetch, article_schema, mock_update_resource):
-    s = Session('http://localhost:80801/', schema=article_schema, enable_async=True)
+    s = Session('http://localhost:80801/', is_async=True, schema=article_schema)
 
     doc = await s.get('articles')
     article = doc.resource
