@@ -32,9 +32,6 @@
 #
 
 import collections
-import requests
-import aiohttp
-import json
 import logging
 from itertools import chain
 from typing import TYPE_CHECKING, Set, Optional, Tuple, Dict, Union, Awaitable, AsyncIterator, Iterator, List
@@ -46,8 +43,7 @@ from .modifiers import BaseModifier
 from .resourceobject import ResourceObject
 from .relationships import ResourceTuple
 from .objects import ResourceIdentifier
-from .http import error_from_response, HttpStatus, HttpMethod, HTTP_HEADER_FIELDS
-from .exceptions import DocumentError, AsyncError
+from .exceptions import AsyncError
 from .utils import jsonify_name
 
 if TYPE_CHECKING:
@@ -117,7 +113,6 @@ class Session:
     :param schema: Schema in jsonschema format. See example from :ref:`usage-schema`.
     :param request_kwargs: Additional keyword arguments that are passed to requests.request or
         aiohttp.request functions (such as authentication object)
-
     """
     def __init__(self,
                  server_url: str=None,
@@ -125,26 +120,22 @@ class Session:
                  schema: dict=None,
                  request_kwargs: dict=None,
                  loop: 'AbstractEventLoop'=None,
-                 use_relationship_iterator: bool=False) \
+                 use_relationship_iterator=False) \
             -> None:
-        self._server: ParseResult
-        self._is_async = is_async
-
-        self._request_kwargs: dict = request_kwargs or {}
-
-        if server_url:
-            self._server = urlparse(server_url)
-        else:
-            self._server = None
-
-        self.resources_by_resource_identifier: \
-            'Dict[Tuple[str, str], ResourceObject]' = {}
+        self.resources_by_resource_identifier: 'Dict[Tuple[str, str], ResourceObject]' = {}
         self.resources_by_link: 'Dict[str, ResourceObject]' = {}
         self.documents_by_link: 'Dict[str, Document]' = {}
         self.schema: Schema = Schema(schema)
-        if is_async:
-            self._aiohttp_session = aiohttp.ClientSession(loop=loop)
         self.use_relationship_iterator = use_relationship_iterator
+
+        self._server: ParseResult = urlparse(server_url) if server_url else None
+        self._is_async = is_async
+
+        from .sessionhelpers import AsyncModeHelper, SyncModeHelper
+        if is_async:
+            self._handler = AsyncModeHelper(self, request_kwargs, loop)
+        else:
+            self._handler = SyncModeHelper(self, request_kwargs)
 
     @property
     def is_async(self):
@@ -235,24 +226,6 @@ class Session:
         res = ResourceObject(self, data)
         return res
 
-    def _create_and_commit_sync(self,
-                                resource_type: str,
-                                fields: dict=None,
-                                **more_fields) \
-            -> 'ResourceObject':
-        res = self.create(resource_type, fields, **more_fields)
-        res.commit()
-        return res
-
-    async def _create_and_commit_async(self,
-                                       resource_type: str,
-                                       fields: dict=None,
-                                       **more_fields) \
-            -> 'ResourceObject':
-        res = self.create(resource_type, fields, **more_fields)
-        await res.commit()
-        return res
-
     def create_and_commit(self,
                           resource_type: str,
                           fields: dict=None,
@@ -260,34 +233,25 @@ class Session:
             -> 'Union[Awaitable[ResourceObject], ResourceObject]':
         """
         Create resource and commit (PUSH) it into server.
-        If session is used with is_async=True, this needs
-        to be awaited.
+        This must be awaited in async mode.
         """
-
-        if self.is_async:
-            return self._create_and_commit_async(resource_type, fields, **more_fields)
-        else:
-            return self._create_and_commit_sync(resource_type, fields, **more_fields)
+        return self._handler.create_and_commit(resource_type, fields, **more_fields)
 
     def __enter__(self):
-        self._assert_sync()
         logger.info('Entering session')
         return self
 
     async def __aenter__(self):
-        self._assert_async()
         logger.info('Entering session')
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self._assert_sync()
         logger.info('Exiting session')
         if not exc_type:
             self.commit()
         self.close()
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        self._assert_async()
         logger.info('Exiting session')
         if not exc_type:
             await self.commit()
@@ -296,9 +260,9 @@ class Session:
     def close(self) -> None:
         """
         Close session and invalidate resources.
+        This must be awaited in async mode.
         """
-        if self.is_async:
-            self._aiohttp_session.close()
+        self._handler.close()
         self.invalidate()
 
     def invalidate(self) -> None:
@@ -344,22 +308,6 @@ class Session:
             filter = None
         return resource_id, filter
 
-    def _get_sync(self,
-                  resource_type: str,
-                  resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
-            -> 'Document':
-        resource_id, filter_ = self._resource_type_and_filter(resource_id_or_filter)
-        url = self._url_for_resource(resource_type, resource_id, filter_)
-        return self._fetch_document_by_url_sync(url)
-
-    async def _get_async(self,
-                         resource_type: str,
-                         resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
-            -> 'Document':
-        resource_id, filter_ = self._resource_type_and_filter(resource_id_or_filter)
-        url = self._url_for_resource(resource_type, resource_id, filter_)
-        return await self._fetch_document_by_url_async(url)
-
     def get(self,
             resource_type: str,
             resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
@@ -370,28 +318,9 @@ class Session:
         :param resource_type: Name of resource type.
         :param resource_id_or_filter: Resource id or BaseModifier instance to filter resulting resources.
 
-        If session is used with is_async=True, this needs
-        to be awaited.
+        This must be awaited in async mode.
         """
-        if self.is_async:
-            return self._get_async(resource_type, resource_id_or_filter)
-        else:
-            return self._get_sync(resource_type, resource_id_or_filter)
-
-    def _iterate_sync(self,
-                      resource_type: str,
-                      filter: 'BaseModifier'=None) \
-            -> 'Iterator[ResourceObject]':
-        doc = self.get(resource_type, filter)
-        yield from doc._iterator_sync()
-
-    async def _iterate_async(self,
-                             resource_type: str,
-                             filter: 'BaseModifier'=None) \
-            -> 'AsyncIterator[ResourceObject]':
-        doc = await self._get_async(resource_type, filter)
-        async for res in doc._iterator_async():
-            yield res
+        return self._handler.get(resource_type, resource_id_or_filter)
 
     def iterate(self, resource_type: str, filter: 'BaseModifier'=None) \
             -> 'Union[AsyncIterator[ResourceObject], Iterator[ResourceObject]]':
@@ -400,15 +329,11 @@ class Session:
         If Document uses pagination, fetch results as long as there are new
         results.
 
-        If session is used with is_async=True, this needs to iterated with
-        async for.
+        This must be iterated through with async for when in async mode.
 
         :param filter: BaseModifier instance to filter resulting resources.
         """
-        if self.is_async:
-            return self._iterate_async(resource_type, filter)
-        else:
-            return self._iterate_sync(resource_type, filter)
+        return self._handler.iterate(resource_type, filter)
 
     def read(self, json_data: dict, url='', no_cache=False)-> 'Document':
         """
@@ -422,7 +347,7 @@ class Session:
                                                      no_cache=no_cache)
         return doc
 
-    def _fetch_resource_by_resource_identifier_sync(
+    def _fetch_resource_by_resource_identifier(
                 self,
                 resource: 'Union[ResourceIdentifier, ResourceObject, ResourceTuple]',
                 cache_only=False,
@@ -433,158 +358,25 @@ class Session:
 
         Fetch resource from server by resource identifier.
         """
-        type_, id_ = resource.type, resource.id
-        new_res = not force and self.resources_by_resource_identifier.get((type_, id_))
-        if new_res:
-            return new_res
-        elif cache_only:
-            return None
-        else:
-            # Note: Document creation will add its resources to cache via .add_resources,
-            # no need to do it manually here
-            return self._ext_fetch_by_url_sync(resource.url).resource
+        return self._handler.fetch_resource_by_resource_identifier(resource, cache_only, force)
 
-    async def _fetch_resource_by_resource_identifier_async(
-                self,
-                resource: 'Union[ResourceIdentifier, ResourceObject, ResourceTuple]',
-                cache_only=False,
-                force=False) \
-            -> 'Optional[ResourceObject]':
-        """
-        Internal use. Async version.
-
-        Fetch resource from server by resource identifier.
-        """
-        type_, id_ = resource.type, resource.id
-        new_res = not force and self.resources_by_resource_identifier.get((type_, id_))
-        if new_res:
-            return new_res
-        elif cache_only:
-            return None
-        else:
-            # Note: Document creation will add its resources to cache via .add_resources,
-            # no need to do it manually here
-            return (await self._ext_fetch_by_url_async(resource.url)).resource
-
-    def _fetch_document_by_url_sync(self, url: str) -> 'Document':
+    def _fetch_document_by_url(self, url: str) -> 'Document':
         """
         Internal use.
 
         Fetch Document from server by url.
         """
         # TODO: should we try to guess type, id from url?
-        return self.documents_by_link.get(url) or self._ext_fetch_by_url_sync(url)
+        return self._handler.fetch_document_by_url(url)
 
-    async def _fetch_document_by_url_async(self, url: str) -> 'Document':
-        """
-        Internal use. Async version.
 
-        Fetch Document from server by url.
-        """
-        # TODO: should we try to guess type, id from url?
-        return (self.documents_by_link.get(url) or await self._ext_fetch_by_url_async(url))
-
-    def _ext_fetch_by_url_sync(self, url: str) -> 'Document':
-        json_data = self._fetch_json_sync(url)
-        return self.read(json_data, url)
-
-    async def _ext_fetch_by_url_async(self, url: str) -> 'Document':
-        json_data = await self._fetch_json_async(url)
-        return self.read(json_data, url)
-
-    def _fetch_json_sync(self, url: str) -> dict:
-        """
-        Internal use.
-
-        Fetch document raw json from server using requests library.
-        """
-        self._assert_sync()
-        parsed_url = urlparse(url)
-        logger.info('Fetching document from url %s', parsed_url)
-        response = requests.get(parsed_url.geturl(), **self._request_kwargs)
-        if response.status_code == HttpStatus.HTTP_200_OK:
-            return response.json()
-        else:
-
-            raise DocumentError(f'Error {response.status_code}: '
-                                f'{error_from_response(response)}',
-                                errors={'status_code': response.status_code},
-                                response=response)
-
-    async def _fetch_json_async(self, url: str) -> dict:
-        """
-        Internal use. Async version.
-
-        Fetch document raw json from server using aiohttp library.
-        """
-        self._assert_async()
-        parsed_url = urlparse(url)
-        logger.info('Fetching document from url %s', parsed_url)
-        async with self._aiohttp_session.get(parsed_url.geturl(),
-                                             **self._request_kwargs) as response:
-            if response.status == HttpStatus.HTTP_200_OK:
-                return await response.json(content_type=HTTP_HEADER_FIELDS['Content-Type'])
-            else:
-                raise DocumentError(f'Error {response.status_code}: '
-                                    f'{error_from_response(response)}',
-                                    errors={'status_code': response.status_code},
-                                    response=response)
-
-    def _http_request_sync(self, http_method: str, url: str, send_json: dict) -> Tuple[int, dict, str]:
+    def _http_request(self, http_method: str, url: str, send_json: dict) -> Tuple[int, dict, str]:
         """
         Internal use.
 
         Method to make PATCH/POST requests to server using requests library.
         """
-        self._assert_sync()
-        logger.debug('%s request: %s', http_method.upper(), send_json)
-        response = requests.request(http_method, url,
-                                    json=send_json,
-                                    headers=HTTP_HEADER_FIELDS,
-                                    **self._request_kwargs)
-
-        if not HttpStatus.is_success(response.status_code):  # TODO: handle HTTP 3xx
-            raise DocumentError(f'Could not {http_method.upper()} '
-                                f'({response.status_code}): '
-                                f'{error_from_response(response)}',
-                                errors={'status_code': response.status_code},
-                                response=response,
-                                json_data=send_json)
-
-        return response.status_code, response.json() \
-            if response.content \
-            else {}, response.headers.get('Location')
-
-    async def _http_request_async(self,
-                                  http_method: str,
-                                  url: str,
-                                  send_json: dict) \
-            -> Tuple[int, dict, str]:
-        """
-        Internal use. Async version.
-
-        Method to make PATCH/POST requests to server using aiohttp library.
-        """
-
-        self._assert_async()
-        logger.debug('%s request: %s', http_method.upper(), send_json)
-        content_type = '' if http_method == HttpMethod.DELETE else HTTP_HEADER_FIELDS['Content-Type']
-        async with self._aiohttp_session.request(
-                http_method, url, data=json.dumps(send_json),
-                headers=HTTP_HEADER_FIELDS,
-                **self._request_kwargs) as response:
-
-            if not HttpStatus.is_success(response.status_code):  # TODO: handle HTTP 3xx
-                raise DocumentError(f'Could not {http_method.upper()} '
-                                    f'({response.status}): '
-                                    f'{error_from_response(response)}',
-                                    errors={'status_code': response.status},
-                                    response=response,
-                                    json_data=send_json)
-
-            response_json = await response.json(content_type=content_type)
-
-            return response.status, response_json or {}, response.headers.get('Location')
+        return self._handler.http_request(http_method, url, send_json)
 
     @property
     def dirty_resources(self) -> 'Set[ResourceObject]':
@@ -598,28 +390,13 @@ class Session:
     def is_dirty(self) -> bool:
         return bool(self.dirty_resources)
 
-    def _commit_sync(self) -> None:
-        self._assert_sync()
-        logger.info('Committing dirty resources')
-        for res in self.dirty_resources:
-            res.commit()
-
-    async def _commit_async(self) -> None:
-        self._assert_async()
-        logger.info('Committing dirty resources')
-        for res in self.dirty_resources:
-            await res._commit_async()
-
     def commit(self) -> Optional[Awaitable]:
         """
         Commit (PATCH) all dirty resources to server.
 
         If session is used with is_async=True, this needs to be awaited.
         """
-        if self.is_async:
-            return self._commit_async()
-        else:
-            return self._commit_sync()
+        return self._handler.commit()
 
     def _assert_sync(self, msg=None):
         """

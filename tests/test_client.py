@@ -160,7 +160,7 @@ def load(filename):
 
 @pytest.fixture
 def mock_req(mocker):
-    m1 = mocker.patch('jsonapi_client.session.Session._http_request_sync')
+    m1 = mocker.patch('jsonapi_client.sessionhelpers.SyncModeHelper.http_request')
     m1.return_value = (201, {}, 'location')
     return m1
 
@@ -174,7 +174,7 @@ def mock_req_async(mocker):
             super().__call__(*args)
             return rv
 
-    m2 = mocker.patch('jsonapi_client.session.Session._http_request_async', new_callable=MockedReqAsync)
+    m2 = mocker.patch('jsonapi_client.sessionhelpers.AsyncModeHelper.http_request', new_callable=MockedReqAsync)
     return m2
 
 
@@ -194,8 +194,8 @@ def mocked_fetch(mocker):
         async def __call__(self, url):
             return mock_fetch(url)
 
-    m1 = mocker.patch('jsonapi_client.session.Session._fetch_json_sync', new_callable=MockedFetch)
-    m2 = mocker.patch('jsonapi_client.session.Session._fetch_json_async', new_callable=MockedFetchAsync)
+    m1 = mocker.patch('jsonapi_client.sessionhelpers.SyncModeHelper.fetch_json', new_callable=MockedFetch)
+    m2 = mocker.patch('jsonapi_client.sessionhelpers.AsyncModeHelper.fetch_json', new_callable=MockedFetchAsync)
     return
 
 

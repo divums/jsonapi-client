@@ -88,11 +88,11 @@ class AbstractRelationship(AbstractJsonApiObject):
 
     def _modify_sync(self, modifier: 'BaseModifier') -> 'Document':
         url = modifier.url_with_modifiers(self.url)
-        return self.session._fetch_document_by_url_sync(url)
+        return self.session._fetch_document_by_url(url)
 
     async def _modify_async(self, modifier: 'BaseModifier'):
         url = modifier.url_with_modifiers(self.url)
-        return self.session._fetch_document_by_url_async(url)
+        return self.session._fetch_document_by_url(url)
 
     def filter(self, filter: 'BaseModifier') -> 'Union[Awaitable[Document], Document]':
         """
@@ -242,7 +242,7 @@ class ToOneRelationship(AbstractRelationship):
         if res_id is None:
             self._resources = {None: None}
         else:
-            res = await self.session._fetch_resource_by_resource_identifier_async(res_id)
+            res = await self.session._fetch_resource_by_resource_identifier(res_id)
             self._resources = {(res.type, res.id): res}
         return list(self._resources.values())
 
@@ -252,7 +252,7 @@ class ToOneRelationship(AbstractRelationship):
         if res_id is None:
             self._resources = {None: None}
         else:
-            res = self.session._fetch_resource_by_resource_identifier_sync(res_id)
+            res = self.session._fetch_resource_by_resource_identifier(res_id)
             self._resources = {(res.type, res.id): res}
         return list(self._resources.values())
 
@@ -309,7 +309,7 @@ class ToManyRelationship(AbstractRelationship):
         self.session._assert_async()
         self._resources = {}
         for res_id in self._resource_identifiers:
-            res = await self.session._fetch_resource_by_resource_identifier_async(res_id)
+            res = await self.session._fetch_resource_by_resource_identifier(res_id)
             self._resources[(res.type, res.id)] = res
         return list(self._resources.values())
 
@@ -317,7 +317,7 @@ class ToManyRelationship(AbstractRelationship):
         self.session._assert_sync()
         self._resources = {}
         for res_id in self._resource_identifiers:
-            res = self.session._fetch_resource_by_resource_identifier_sync(res_id)
+            res = self.session._fetch_resource_by_resource_identifier(res_id)
             self._resources[(res.type, res.id)] = res
         return list(self._resources.values())
 
@@ -394,8 +394,7 @@ class LinkRelationship(AbstractRelationship):
 
     async def _fetch_async(self) -> 'List[ResourceObject]':
         self.session._assert_async()
-        self._document = \
-            await self.session._fetch_document_by_url_async(self.links.related.url)
+        self._document = await self.session._fetch_document_by_url(self.links.related.url)
         if self.session.use_relationship_iterator:
             return self._document.iterator()
         self._resources = {(r.type, r.id): r for r in self._document.resources}
@@ -403,7 +402,7 @@ class LinkRelationship(AbstractRelationship):
 
     def _fetch_sync(self) -> 'List[ResourceObject]':
         self.session._assert_sync()
-        self._document = self.session._fetch_document_by_url_sync(self.links.related.url)
+        self._document = self.session._fetch_document_by_url(self.links.related.url)
         if self.session.use_relationship_iterator:
             return self._document.iterator()
         self._resources = {(r.type, r.id): r for r in self._document.resources}

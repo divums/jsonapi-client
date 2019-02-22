@@ -572,9 +572,9 @@ class ResourceObject(AbstractJsonApiObject):
             return await self._perform_delete_async(url)
 
         url = self._pre_commit(url)
-        status, result, location = await self.session._http_request_async(
-                                                self._http_method, url,
-                                                self._commit_data(meta))
+        status, result, location = await self.session._http_request(self._http_method,
+                                                                    url,
+                                                                    self._commit_data(meta))
         return self._post_commit(status, result, location)
 
     def _commit_sync(self, url: str= '', meta: dict=None) -> 'None':
@@ -583,8 +583,9 @@ class ResourceObject(AbstractJsonApiObject):
             return self._perform_delete(url)
 
         url = self._pre_commit(url)
-        status, result, location = self.session._http_request_sync(self._http_method, url,
-                                                                   self._commit_data(meta))
+        status, result, location = self.session._http_request(self._http_method,
+                                                              url,
+                                                              self._commit_data(meta))
         return self._post_commit(status, result, location)
 
     def commit(self, custom_url: str = '', meta: dict = None) \
@@ -623,14 +624,12 @@ class ResourceObject(AbstractJsonApiObject):
 
     def _refresh_sync(self) -> None:
         self.session._assert_sync()
-        new_res = self.session._fetch_resource_by_resource_identifier_sync(self, force=True)
+        new_res = self.session._fetch_resource_by_resource_identifier(self, force=True)
         self._update_resource(new_res)
 
     async def _refresh_async(self) -> None:
         self.session._assert_async()
-        new_res = await self.session._fetch_resource_by_resource_identifier_async(
-                                                                            self,
-                                                                            force=True)
+        new_res = await self.session._fetch_resource_by_resource_identifier(self, force=True)
         self._update_resource(new_res)
 
     def refresh(self) -> Optional[Awaitable]:
@@ -652,12 +651,12 @@ class ResourceObject(AbstractJsonApiObject):
 
     def _perform_delete(self, url='') -> None:
         url = url or self.url
-        self.session._http_request_sync(HttpMethod.DELETE, url, {})
+        self.session._http_request(HttpMethod.DELETE, url, {})
         self.session.remove_resource(self)
 
     async def _perform_delete_async(self, url=''):
         url = url or self.url
-        await self.session._http_request_async(HttpMethod.DELETE, url, {})
+        await self.session._http_request(HttpMethod.DELETE, url, {})
         self.session.remove_resource(self)
 
     def mark_clean(self) -> None:
