@@ -61,7 +61,6 @@ Client session
     s = Session('http://localhost:8080/',
                 request_kwargs={'auth': HttpBasicAuth('user', 'password')})
 
-
     # Use Session as context manager
     # Changes are committed at the end of the block and session is closed.
     with Session(...) as s:
@@ -70,7 +69,6 @@ Client session
     # Or in async mode as follows
     async with Session(..., is_async=True) as s:
         # your code
-
 
     # Fetch multiple resources
     documents = s.get('resource_type')
@@ -81,42 +79,48 @@ Client session
     documents = await s.get('resource_type')
 
 
-    # Remember to close the session unless a context manager
+    # Then remember to close the session, unless using it as context manager
     s.close()
 
-Filtering and including
------------------------
+Filtering and includes
+----------------------
 
 .. code-block:: python
 
-    from jsonapi_client import Filter, Inclusion, Modifier
+    from jsonapi_client import Filter, Include, Modifier
 
-    # You need first to specify your filter instance.
-    # - filtering with two criteria (and)
-    filter = Filter(attribute='something', attribute2='something_else')
-    # - filtering some-dict.some-attr == 'something'
-    filter = Filter(some_dict__some_attr='something'))
+    # First to specify a modifier instance.
+    # - filtering with two criteria joined with &
+    filter = Filter(attribute1='something', attribute2='something_else')
+    # - filtering with some-dict.some-attr == 'something'
+    filter = Filter(some_dict__some_attr='something')
+    # - filtering with raw query string
+    filter = Filter(query_str='filter[attribute1]=something&filter[attribute2]=something_else')
+    # - mix raw and named parameter based filtering
+    filter = Filter('filter[attribute1]=something&filter[attribute2]=something_else',
+                    **{'attribute1': 'else', 'attribute2': 'something_more'})
 
-    # Same thing goes for including.
-    # - including two fields
-    include = Inclusion('related_field', 'other_related_field')
+    # Same for related resource inclusion.
+    # - including resources under two relationship fields
+    include = Include('related_field', 'other_related_field')
 
     # Custom syntax for request parameters.
     # If you have different URL schema for filtering or other GET parameters,
-    # you can implement your own Modifier class (derive it from Modifier and
-    # reimplement appended_query).
-    modifier = Modifier('filter[post]=1&filter[author]=2')
+    # you can use Modifier class to pass a raw query string.
+    # Alternatively, you can implement your own modifier class by inheriting
+    # from BaseModifier and implementing appended_query.
+    modifier = Modifier('filter[post]=1&filter[author]=2&sort=attribute1,attribute2&include=relation1,relation3')
 
-    # All above classes subclass Modifier and can be added to concatenate
-    # parameters
+    # All above classes subclass BaseModifier and can be concatenated into a
+    # single modifier
     modifier_sum = filter + include + modifier
 
     # Now fetch your document
-    filtered = s.get('resource_type', modifier_sum) # AsyncIO with await
+    filtered = s.get('resource_type', modifier_sum) # NOTE: use await when async
 
     # To access resources included in document:
     r1 = document.resources[0]  # first ResourceObject of document.
-    r2 = document.resource      # if there is only 1 resource we can use this
+    r2 = document.resource      # if there is only 1 resource you can use this
 
 Pagination
 ----------
@@ -301,17 +305,19 @@ Creating new resources
             to_one_relationship='author-id-here',
             to_many_relationship=['comment-id1', 'comment-id2'],
 
-            # if field name has underscores, pass them in `fields` argument as dict
+            # if a field name contains underscore, pass it in `fields` dict
             fields={'field_name_with_underscore': '1'}
     )
 
     # Async:
     a = await s.create_and_commit(
             'articles', # model
+
             title='One really interesting article',
             dict_object__attribute='2',
             to_one_relationship='author-id-here',
             to_many_relationship=['comment-id1', 'comment-id2'],
+
             fields={'some_field_with_underscore': '1'}
     )
 
@@ -322,4 +328,4 @@ Deleting resources
 
     # Delete resource
     a.delete() # Mark to be deleted
-    a.commit() # Actually delete
+    a.commit() # Carry out the deletion
