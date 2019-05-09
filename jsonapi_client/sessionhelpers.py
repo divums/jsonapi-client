@@ -43,7 +43,7 @@ from .modifiers import BaseModifier
 from .resourceobject import ResourceObject
 from .relationships import ResourceTuple
 from .objects import ResourceIdentifier
-from .http import error_from_response, HttpStatus, HttpMethod, HTTP_HEADER_FIELDS
+from .http import error_from_response, HTTPStatus, HTTPMethod, HTTP_HEADER_FIELDS, is_success
 from .exceptions import DocumentError
 
 if TYPE_CHECKING:
@@ -143,7 +143,7 @@ class SyncModeHelper:
         parsed_url = urlparse(url)
         logger.info('Fetching document from url %s', parsed_url)
         response = requests.get(parsed_url.geturl(), **self.request_kwargs)
-        if response.status_code == HttpStatus.HTTP_200_OK:
+        if response.status_code == HTTPStatus.OK:
             return response.json()
         else:
 
@@ -168,7 +168,7 @@ class SyncModeHelper:
                                     headers=HTTP_HEADER_FIELDS,
                                     **self.request_kwargs)
 
-        if not HttpStatus.is_success(response.status_code):  # TODO: handle HTTP 3xx
+        if not is_success(response.status_code):  # TODO: handle HTTP 3xx
             raise DocumentError(f'Could not {http_method.upper()} '
                                 f'({response.status_code}): '
                                 f'{error_from_response(response)}',
@@ -275,12 +275,12 @@ class AsyncModeHelper:
         logger.info('Fetching document from url %s', parsed_url)
         async with self.aiohttp_session.get(parsed_url.geturl(),
                                             **self.request_kwargs) as response:
-            if response.status == HttpStatus.HTTP_200_OK:
+            if response.status == HTTPStatus.OK:
                 return await response.json(content_type=HTTP_HEADER_FIELDS['Content-Type'])
             else:
-                raise DocumentError(f'Error {response.status_code}: '
+                raise DocumentError(f'Error {response.status}: '
                                     f'{error_from_response(response)}',
-                                    errors={'status_code': response.status_code},
+                                    errors={'status_code': response.status},
                                     response=response)
 
     async def http_request(
@@ -293,13 +293,13 @@ class AsyncModeHelper:
         Method to make PATCH/POST requests to server using requests library.
         """
         logger.debug('%s request: %s', http_method.upper(), send_json)
-        content_type = '' if http_method == HttpMethod.DELETE else HTTP_HEADER_FIELDS['Content-Type']
+        content_type = '' if http_method == HTTPMethod.DELETE else HTTP_HEADER_FIELDS['Content-Type']
         async with self.aiohttp_session.request(
                 http_method, url, data=json.dumps(send_json),
                 headers=HTTP_HEADER_FIELDS,
                 **self.request_kwargs) as response:
 
-            if not HttpStatus.is_success(response.status_code):  # TODO: handle HTTP 3xx
+            if not is_success(response.status):  # TODO: handle HTTP 3xx
                 raise DocumentError(f'Could not {http_method.upper()} '
                                     f'({response.status}): '
                                     f'{error_from_response(response)}',

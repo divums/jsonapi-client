@@ -37,7 +37,7 @@ from typing import Set, Optional, Awaitable, Union, Iterable, TYPE_CHECKING, Any
 
 from .objects import AbstractJsonApiObject, Links, Meta
 from .exceptions import ValidationError, DocumentInvalid
-from .http import HttpMethod, HttpStatus
+from .http import HTTPMethod, HTTPStatus, has_resource
 from .utils import pythonify_names, jsonify_name, cached_property
 
 if TYPE_CHECKING:
@@ -524,7 +524,7 @@ class ResourceObject(AbstractJsonApiObject):
         if self.id:
             res_json['id'] = self.id
 
-        if self._http_method == HttpMethod.POST or full:
+        if self._http_method == HTTPMethod.POST or full:
             # When creating new resources, we need to define all relationships
             # as either to-one or to-many.
             relationships = {key: {'data': value.as_json_resource_identifiers}
@@ -547,23 +547,23 @@ class ResourceObject(AbstractJsonApiObject):
 
     @property
     def _http_method(self) -> str:
-        return HttpMethod.PATCH if self.id else HttpMethod.POST
+        return HTTPMethod.PATCH if self.id else HTTPMethod.POST
 
     def _pre_commit(self, url):
-        url = url or self.post_url if self._http_method == HttpMethod.POST else self.url
+        url = url or self.post_url if self._http_method == HTTPMethod.POST else self.url
         logger.info('Committing %s to %s', self, url)
         self.validate()
         return url
 
     def _post_commit(self, status, result, location):
-        if HttpStatus.has_resource(status):
+        if has_resource(status):
             self._update_resource(result, location)
 
         # If no resources are returned (which is the case when HTTP 202 Accepted
         # is received for PATCH, for example).
         self.mark_clean()
 
-        if status == HttpStatus.HTTP_202_ACCEPTED:
+        if status == HTTPStatus.ACCEPTED:
             return self.session.read(result, location, no_cache=True).resource
 
     async def _commit_async(self, url: str= '', meta=None) -> None:
@@ -651,12 +651,12 @@ class ResourceObject(AbstractJsonApiObject):
 
     def _perform_delete(self, url='') -> None:
         url = url or self.url
-        self.session._http_request(HttpMethod.DELETE, url, {})
+        self.session._http_request(HTTPMethod.DELETE, url, {})
         self.session.remove_resource(self)
 
     async def _perform_delete_async(self, url=''):
         url = url or self.url
-        await self.session._http_request(HttpMethod.DELETE, url, {})
+        await self.session._http_request(HTTPMethod.DELETE, url, {})
         self.session.remove_resource(self)
 
     def mark_clean(self) -> None:
