@@ -88,8 +88,8 @@ class AttributeDict(dict):
     def __init__(self,
                  data: dict,
                  resource: 'ResourceObject',
-                 name: str ='',
-                 parent: 'AttributeDict'=None) \
+                 name: str = '',
+                 parent: 'AttributeDict' = None) \
             -> None:
         """
         :param data: Input data that is stored here.
@@ -296,7 +296,7 @@ class RelationshipDict(dict):
         self._resource = new_resource
 
     @staticmethod
-    def _determine_class(data: dict, relation_type: str=None):
+    def _determine_class(data: dict, relation_type: str = None):
         """
         From data and/or provided relation_type, determine Relationship class
         to be used.
@@ -441,7 +441,6 @@ class ResourceObject(AbstractJsonApiObject):
         self.meta = Meta(self.session, data.get('meta', {}))
 
         self._attributes = (
-            # TODO: handle if no attributes
             AttributeDict(data=data.get('attributes', {}), resource=self)
         )
         self._relationships = (
@@ -566,7 +565,7 @@ class ResourceObject(AbstractJsonApiObject):
         if status == HTTPStatus.ACCEPTED:
             return self.session.read(result, location, no_cache=True).resource
 
-    async def _commit_async(self, url: str= '', meta=None) -> None:
+    async def _commit_async(self, url: str = '', meta = None) -> None:
         self.session._assert_async()
         if self._delete:
             return await self._perform_delete_async(url)
@@ -577,7 +576,7 @@ class ResourceObject(AbstractJsonApiObject):
                                                                     self._commit_data(meta))
         return self._post_commit(status, result, location)
 
-    def _commit_sync(self, url: str= '', meta: dict=None) -> 'None':
+    def _commit_sync(self, url: str = '', meta: dict = None) -> 'None':
         self.session._assert_sync()
         if self._delete:
             return self._perform_delete(url)
@@ -589,7 +588,7 @@ class ResourceObject(AbstractJsonApiObject):
         return self._post_commit(status, result, location)
 
     def commit(self, custom_url: str = '', meta: dict = None) \
-            -> 'Union[None, ResourceObject, Awaitable[Optional[ResourceObject]]':
+            -> 'Union[None, ResourceObject, Awaitable[Optional[ResourceObject]]]':
         """
         Commit (PATCH/POST) this resource to server.
 
@@ -605,7 +604,7 @@ class ResourceObject(AbstractJsonApiObject):
 
     def _update_resource(self,
                          resource_dict: 'Union[dict, ResourceObject]',
-                         location: str=None) -> None:
+                         location: str = None) -> None:
         if isinstance(resource_dict, dict):
             new_res = self.session.read(resource_dict, location, no_cache=True).resource
         else:

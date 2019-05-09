@@ -59,7 +59,7 @@ class Schema:
     Session contains Schema.
     """
 
-    def __init__(self, schema_data: dict=None) -> None:
+    def __init__(self, schema_data: dict = None) -> None:
         self._schema_data = schema_data
 
     def find_spec(self, model_name: str, attribute_name: str) -> dict:
@@ -115,12 +115,12 @@ class Session:
         aiohttp.request functions (such as authentication object)
     """
     def __init__(self,
-                 server_url: str=None,
-                 is_async: bool=False,
-                 schema: dict=None,
-                 request_kwargs: dict=None,
-                 loop: 'AbstractEventLoop'=None,
-                 use_relationship_iterator=False) \
+                 server_url: str = None,
+                 is_async: bool = False,
+                 schema: dict = None,
+                 request_kwargs: dict = None,
+                 loop: 'AbstractEventLoop' = None,
+                 use_relationship_iterator: bool = False) \
             -> None:
         self.resources_by_resource_identifier: 'Dict[Tuple[str, str], ResourceObject]' = {}
         self.resources_by_link: 'Dict[str, ResourceObject]' = {}
@@ -180,7 +180,7 @@ class Session:
                                  'if there are more than 1 type')
             return {'id': value, 'type': resource_types[0]}
 
-    def create(self, resource_type: str, fields: dict=None, **more_fields) -> 'ResourceObject':
+    def create(self, resource_type: str, fields: dict = None, **more_fields) -> 'ResourceObject':
         """
         Create a new ResourceObject of resource_type. This requires schema to
         be defined.
@@ -228,7 +228,7 @@ class Session:
 
     def create_and_commit(self,
                           resource_type: str,
-                          fields: dict=None,
+                          fields: dict = None,
                           **more_fields) \
             -> 'Union[Awaitable[ResourceObject], ResourceObject]':
         """
@@ -288,8 +288,8 @@ class Session:
 
     def _url_for_resource(self,
                           resource_type: str,
-                          resource_id: str=None,
-                          filter: 'BaseModifier'=None) -> str:
+                          resource_id: str = None,
+                          filter: 'BaseModifier' = None) -> str:
         url = f'{self.url_prefix}/{resource_type}'
         if resource_id is not None:
             url = f'{url}/{resource_id}'
@@ -298,7 +298,7 @@ class Session:
         return url
 
     @staticmethod
-    def _resource_type_and_filter(resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
+    def _resource_type_and_filter(resource_id_or_filter: 'Union[BaseModifier, str]' = None) \
             -> 'Tuple[Optional[str], Optional[BaseModifier]]':
         if isinstance(resource_id_or_filter, BaseModifier):
             resource_id = None
@@ -310,7 +310,7 @@ class Session:
 
     def get(self,
             resource_type: str,
-            resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
+            resource_id_or_filter: 'Union[BaseModifier, str]' = None) \
             -> 'Union[Awaitable[Document], Document]':
         """
         Request (GET) Document from server.
@@ -322,7 +322,7 @@ class Session:
         """
         return self._handler.get(resource_type, resource_id_or_filter)
 
-    def iterate(self, resource_type: str, filter: 'BaseModifier'=None) \
+    def iterate(self, resource_type: str, filter: 'BaseModifier' = None) \
             -> 'Union[AsyncIterator[ResourceObject], Iterator[ResourceObject]]':
         """
         Request (GET) Document from server and iterate through resources.
@@ -331,6 +331,7 @@ class Session:
 
         This must be iterated through with async for when in async mode.
 
+        :param resource_type
         :param filter: BaseModifier instance to filter resulting resources.
         """
         return self._handler.iterate(resource_type, filter)
@@ -368,7 +369,6 @@ class Session:
         """
         # TODO: should we try to guess type, id from url?
         return self._handler.fetch_document_by_url(url)
-
 
     def _http_request(self, http_method: str, url: str, send_json: dict) -> Tuple[int, dict, str]:
         """

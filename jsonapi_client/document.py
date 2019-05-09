@@ -59,7 +59,7 @@ class Document(AbstractJsonApiObject):
     def __init__(self, session: 'Session',
                  json_data: dict,
                  url: str,
-                 no_cache: bool=False)\
+                 no_cache: bool = False)\
             -> None:
         self._no_cache = no_cache  # if true, do not store resources to session cache
         self._url = url

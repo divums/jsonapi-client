@@ -105,7 +105,7 @@ class Filter(BaseModifier):
     """
     modifier_keyword = 'filter'
 
-    def __init__(self, query_str: str='', **kwargs: 'NamedParameters') -> None:
+    def __init__(self, query_str: str = '', **kwargs: 'NamedParameters') -> None:
         """
         :param query_str: Manually specified modifier. Value may be passed as
             is if not merged with the named parameters. If the same named
@@ -168,7 +168,7 @@ class Include(BaseModifier):
 
 class SparseFieldset(Filter):
     """
-    Implements requesting limited fields per resource type as per https://jsonapi.org/format/1.0/#fetching-sparse-fieldsets
+    Implements requesting limited fields per resource type as per  https://jsonapi.org/format/1.0/#fetching-sparse-fieldsets
     """
     modifier_keyword = 'fields'
 

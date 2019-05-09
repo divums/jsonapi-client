@@ -65,8 +65,8 @@ class AbstractRelationship(AbstractJsonApiObject):
     def __init__(self,
                  session: 'Session',
                  data: dict,
-                 resource_types: List[str]=None,
-                 relation_type: str=None) \
+                 resource_types: List[str] = None,
+                 relation_type: str = None) \
             -> None:
         """
         :param session:
@@ -212,7 +212,7 @@ class AbstractRelationship(AbstractJsonApiObject):
     def __bool__(self):
         raise NotImplementedError
 
-    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', resource_type: str=None) \
+    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', resource_type: str = None) \
             -> 'Union[ResourceIdentifier, ResourceObject]':
         if isinstance(value, (ResourceObject, ResourceIdentifier, ResourceTuple)):
             data = {'id': value.id, 'type': value.type}
@@ -278,13 +278,13 @@ class ToOneRelationship(AbstractRelationship):
             return None
         return self._resource_identifier.as_resource_identifier_dict()
 
-    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', resource_type: str= '') \
+    def _value_to_identifier(self, value: 'ResourceIdentifierTypes', resource_type: str = '') \
             -> 'Union[None, ResourceIdentifier, ResourceObject]':
         if value is None:
             return None
         return super()._value_to_identifier(value, resource_type)
 
-    def set(self, new_value: 'ResourceIdentifierTypes', resource_type: str=None) -> None:
+    def set(self, new_value: 'ResourceIdentifierTypes', resource_type: str = None) -> None:
 
         self._resource_identifier = self._value_to_identifier(new_value, resource_type)
         self.mark_dirty()
@@ -334,7 +334,7 @@ class ToManyRelationship(AbstractRelationship):
 
     def set(self,
             new_values: 'Iterable[ResourceIdentifierTypes]',
-            resource_type: str=None) \
+            resource_type: str = None) \
             -> None:
         self._resource_identifiers = [self._value_to_identifier(value, resource_type)
                                       for value in new_values]
@@ -347,7 +347,10 @@ class ToManyRelationship(AbstractRelationship):
         self._resource_identifiers.clear()
         self.mark_dirty()
 
-    def add(self, new_value: 'Union[ResourceIdentifierTypes, Iterable[ResourceIdentifierTypes]]', resource_type=None) -> None:
+    def add(self,
+            new_value: 'Union[ResourceIdentifierTypes, Iterable[ResourceIdentifierTypes]]',
+            resource_type = None) \
+            -> None:
         """
         Add new resources
         """
@@ -430,14 +433,14 @@ class LinkRelationship(AbstractRelationship):
 
     def set(self,
             new_value: 'Union[Iterable[ResourceIdentifierTypes], ResourceIdentifierTypes]',
-            resource_type: str=None) \
+            resource_type: str = None) \
             -> None:
         if isinstance(new_value, collections.Iterable):
             if self.is_single:
                 logger.warning('This should contain list of resources, '
                                'but only one is given')
             resources = [self._value_to_identifier(val, resource_type) for val in new_value]
-            self._resources = {(r.type, r.id):r for r in resources}
+            self._resources = {(r.type, r.id): r for r in resources}
         else:
             if not self.is_single:
                 logger.warning('This should contain only 1 resource, '

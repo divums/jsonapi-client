@@ -59,7 +59,7 @@ class SyncModeHelper:
     def __init__(
             self,
             session: 'Session',
-            request_kwargs: dict=None) \
+            request_kwargs: dict = None) \
             -> None:
         self.session = session
         self.request_kwargs = request_kwargs or {}
@@ -67,7 +67,7 @@ class SyncModeHelper:
     def create_and_commit(
             self,
             resource_type: str,
-            fields: dict=None,
+            fields: dict = None,
             **more_fields) \
             -> 'ResourceObject':
         res = self.session.create(resource_type, fields, **more_fields)
@@ -87,7 +87,7 @@ class SyncModeHelper:
 
     def get(self,
             resource_type: str,
-            resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
+            resource_id_or_filter: 'Union[BaseModifier, str]' = None) \
             -> 'Document':
         resource_id, filter_ = self.session._resource_type_and_filter(resource_id_or_filter)
         url = self.session._url_for_resource(resource_type, resource_id, filter_)
@@ -96,7 +96,7 @@ class SyncModeHelper:
     def iterate(
             self,
             resource_type: str,
-            filter: 'BaseModifier'=None) \
+            filter: 'BaseModifier' = None) \
             -> 'Iterator[ResourceObject]':
         doc = self.get(resource_type, filter)
         yield from doc._iterator_sync()
@@ -188,7 +188,7 @@ class AsyncModeHelper:
     def __init__(
             self,
             session: 'Session',
-            request_kwargs: dict=None,
+            request_kwargs: dict = None,
             loop: 'AbstractEventLoop' = None) \
             -> None:
         self.session = session
@@ -199,7 +199,7 @@ class AsyncModeHelper:
     async def create_and_commit(
             self,
             resource_type: str,
-            fields: dict=None,
+            fields: dict = None,
             **more_fields) \
             -> 'ResourceObject':
         res = self.session.create(resource_type, fields, **more_fields)
@@ -220,7 +220,7 @@ class AsyncModeHelper:
     async def get(
             self,
             resource_type: str,
-            resource_id_or_filter: 'Union[BaseModifier, str]'=None) \
+            resource_id_or_filter: 'Union[BaseModifier, str]' = None) \
             -> 'Document':
         resource_id, filter_ = self.session._resource_type_and_filter(resource_id_or_filter)
         url = self.session._url_for_resource(resource_type, resource_id, filter_)
